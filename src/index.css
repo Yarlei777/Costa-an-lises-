@@ -1,0 +1,155 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Lexend:wght@300;400;500;600;700;800;900&family=Roboto+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Lexend", sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-gold-primary: #D4AF37;
+  --color-gold-secondary: #F2D479;
+  --color-gold-accent: #B8860B;
+  --color-gold-muted: rgba(212, 175, 55, 0.1);
+  --color-obsidian-deep: #050505;
+}
+
+:root {
+  --obsidian: #050505;
+  --gold-primary: #D4AF37;
+  --gold-secondary: #F2D479;
+  --gold-accent: #B8860B;
+  --gold-metallic: linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C);
+  --glass: rgba(255, 255, 255, 0.02);
+  --glass-border: rgba(212, 175, 55, 0.15);
+}
+
+body {
+  background-color: var(--obsidian);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  position: relative;
+}
+
+.mesh-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  background: radial-gradient(circle at 50% 50%, rgba(212, 175, 55, 0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.gold-gradient {
+  background: var(--gold-metallic);
+}
+
+.neon-green-gradient {
+  background: linear-gradient(135deg, #4ade80, #22c55e, #16a34a);
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+}
+
+.gold-text {
+  background: var(--gold-metallic);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 12px rgba(212, 175, 55, 0.4));
+}
+
+.glass-card {
+  background: rgba(10, 10, 10, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  will-change: transform;
+  contain: content;
+}
+
+.glass-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.1) 50%
+  ),
+  linear-gradient(
+    90deg,
+    rgba(212, 175, 55, 0.05),
+    rgba(212, 175, 55, 0.02),
+    rgba(212, 175, 55, 0.05)
+  );
+  background-size: 100% 2px, 3px 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.3;
+}
+
+.glass-card:hover {
+  background: rgba(15, 15, 15, 0.7);
+  border-color: rgba(212, 175, 55, 0.4);
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.9);
+}
+
+.liquid-progress {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+}
+
+.glow-gold {
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+}
+
+.glow-gold-intense {
+  box-shadow: 0 0 40px rgba(212, 175, 55, 0.4);
+}
+
+.gold-border {
+  border: 1px solid rgba(212, 175, 55, 0.5);
+}
+
+.gold-glow-text {
+  text-shadow: 0 0 15px rgba(212, 175, 55, 0.6);
+}
+
+.bg-obsidian-dark {
+  background-color: #0a0a0a;
+}
+
+.bg-obsidian-light {
+  background-color: #1a1a1a;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%) skewX(-12deg); }
+  100% { transform: translateX(200%) skewX(-12deg); }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s linear infinite;
+}
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--obsidian);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-primary);
+}

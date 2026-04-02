@@ -1,0 +1,34 @@
+{
+  "entities": {
+    "UserSession": {
+      "title": "User Session",
+      "description": "Stores the roulette history and preferences for a user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The unique ID of the user."
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "The list of numbers added to the roulette history."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The last time the session was updated."
+        }
+      },
+      "required": ["uid", "history", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/user_sessions/{uid}": {
+      "schema": "UserSession",
+      "description": "A document for each user's session data."
+    }
+  }
+}
