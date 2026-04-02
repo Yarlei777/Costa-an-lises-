@@ -295,7 +295,7 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-pro-preview",
         contents: `O usuário quer entrar em uma casa de apostas ou pesquisar sobre: "${query}". 
         Se for o nome de uma casa de apostas famosa (ex: bet365, betano, blaze, estrela bet), retorne APENAS a URL oficial dela (ex: https://www.bet365.com).
         Se for uma pergunta ou estratégia, responda de forma técnica e resumida.
@@ -451,18 +451,20 @@ export default function App() {
 
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: compressedBase64.split(',')[1],
+        model: "gemini-flash-latest",
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: compressedBase64.split(',')[1],
+              },
             },
-          },
-          {
-            text: "Extraia o histórico de números da roleta desta imagem.",
-          },
-        ],
+            {
+              text: "Extraia o histórico de números da roleta desta imagem.",
+            },
+          ]
+        },
         config: {
           systemInstruction: "Você é um motor de OCR especializado em interfaces de cassino ao vivo (Evolution, Playtech, Pragmatic). Sua única tarefa é identificar o histórico de números sorteados na roleta. REGRAS: 1. Localize a barra de histórico. 2. Extraia apenas números 0-36. 3. Ignore saldos, apostas e relógios. 4. Ordene do MAIS RECENTE para o MAIS ANTIGO. 5. Retorne estritamente um array JSON de inteiros.",
           responseMimeType: "application/json",
