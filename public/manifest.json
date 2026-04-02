@@ -1,0 +1,21 @@
+{
+  "name": "Costa Análises | Terminal de Elite",
+  "short_name": "CostaAnálises",
+  "description": "Terminal de Elite para Predição Avançada em Roleta Europeia",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#D4AF37",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/gold/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/gold/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

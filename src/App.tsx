@@ -152,6 +152,7 @@ const EstatisticasTab = lazy(() => import("./components/EstatisticasTab"));
 const HistoricoTab = lazy(() => import("./components/HistoricoTab"));
 const TerminaisTab = lazy(() => import("./components/TerminaisTab"));
 const RadarTab = lazy(() => import("./components/RadarTab"));
+const LegalModal = lazy(() => import("./components/LegalModals"));
 
 // Loading fallback component
 const TabLoading = () => (
@@ -181,6 +182,7 @@ const ALERT_CONFIG_TYPES = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('DASHBOARD');
+  const [legalModal, setLegalModal] = useState<{ open: boolean; type: 'terms' | 'privacy' }>({ open: false, type: 'terms' });
   const [history, setHistory] = useState<number[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1954,16 +1956,41 @@ export default function App() {
 
     {/* Footer */}
     <footer className="max-w-5xl mx-auto px-6 py-16 border-t border-white/5 text-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex items-center gap-2 opacity-30">
-            <ShieldCheck className="w-4 h-4" />
-            <span className="text-[10px] uppercase tracking-[0.5em] font-black">Costa Security Protocol</span>
+        <div className="flex flex-col items-center gap-6">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={() => setLegalModal({ open: true, type: 'terms' })}
+              className="text-[9px] font-black text-zinc-500 hover:text-gold-primary uppercase tracking-[0.2em] transition-colors"
+            >
+              Termos de Uso
+            </button>
+            <div className="w-1 h-1 rounded-full bg-zinc-800" />
+            <button 
+              onClick={() => setLegalModal({ open: true, type: 'privacy' })}
+              className="text-[9px] font-black text-zinc-500 hover:text-gold-primary uppercase tracking-[0.2em] transition-colors"
+            >
+              Privacidade
+            </button>
           </div>
-          <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] font-bold">
-            Algoritmo de Alta Frequência • Licença de Uso Profissional
-          </p>
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex items-center gap-2 opacity-30">
+              <ShieldCheck className="w-4 h-4" />
+              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Costa Security Protocol</span>
+            </div>
+            <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] font-bold">
+              Algoritmo de Alta Frequência • Licença de Uso Profissional
+            </p>
+          </div>
         </div>
       </footer>
+
+      <Suspense fallback={null}>
+        <LegalModal 
+          isOpen={legalModal.open} 
+          onClose={() => setLegalModal({ ...legalModal, open: false })} 
+          type={legalModal.type} 
+        />
+      </Suspense>
     </div>
   );
 }

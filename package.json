@@ -1,6 +1,7 @@
 {
-  "name": "react-example",
+  "name": "costa-analises-terminal",
   "private": true,
+  "description": "Terminal de Elite para Predição Avançada em Roleta Europeia",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
