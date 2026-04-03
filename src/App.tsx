@@ -171,6 +171,34 @@ const TabLoading = () => (
   </div>
 );
 
+const ApiKeyModal = ({ isOpen, onClose, onSave, currentKey }: { isOpen: boolean, onClose: () => void, onSave: (key: string) => void, currentKey: string }) => {
+  const [key, setKey] = useState(currentKey);
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-zinc-900 border border-gold-primary/30 p-8 rounded-3xl max-w-md w-full shadow-2xl">
+        <h2 className="text-xl font-black text-gold-primary uppercase tracking-widest mb-4 flex items-center gap-2">
+          <Settings className="w-6 h-6" /> Configurar Chave API
+        </h2>
+        <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
+          Cole sua chave API do Google Gemini abaixo. Esta chave é armazenada apenas no seu navegador.
+        </p>
+        <input 
+          type="password" 
+          value={key} 
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="Cole sua chave aqui..."
+          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-gold-primary outline-none mb-6 transition-all"
+        />
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all">Cancelar</button>
+          <button onClick={() => onSave(key)} className="flex-1 py-3 rounded-xl bg-gold-primary text-black text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-gold-primary/20">Salvar Chave</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const COLORS = {
   red: 'bg-red-600',
   black: 'bg-zinc-900',
@@ -190,6 +218,8 @@ const ALERT_CONFIG_TYPES = [
 ];
 
 export default function App() {
+  const [manualApiKey, setManualApiKey] = useState<string>(() => localStorage.getItem('manual_api_key') || '');
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('DASHBOARD');
   const [legalModal, setLegalModal] = useState<{ open: boolean; type: 'terms' | 'privacy' }>({ open: false, type: 'terms' });
   const [history, setHistory] = useState<number[]>([]);
@@ -278,6 +308,13 @@ export default function App() {
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
   const [lastNumber, setLastNumber] = useState<number | null>(null);
 
+  const saveApiKey = (key: string) => {
+    setManualApiKey(key);
+    localStorage.setItem('manual_api_key', key);
+    setIsApiKeyModalOpen(false);
+    toast.success("Chave API salva com sucesso!");
+  };
+
   const handleGoogleSearch = React.useCallback(async (query: string) => {
     if (!query) {
       setBrowserUrl(null);
@@ -302,7 +339,14 @@ export default function App() {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = manualApiKey || process.env.API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        toast.error("Chave API não configurada. Por favor, clique no botão 'Chave API' no topo.");
+        setIsApiKeyModalOpen(true);
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `O usuário quer entrar em uma casa de apostas ou pesquisar sobre: "${query}". 
@@ -324,9 +368,17 @@ export default function App() {
         setSearchResults(text);
         setBrowserUrl(null);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro na pesquisa Google:", error);
-      setSearchResults("Erro ao realizar a pesquisa. Verifique sua conexão ou chave de API.");
+      const errorMsg = error?.message || "";
+      if (errorMsg.includes("Requested entity was not found") || errorMsg.includes("API_KEY_INVALID")) {
+        toast.error("Chave API inválida ou não encontrada.");
+        localStorage.removeItem('manual_api_key');
+        setManualApiKey('');
+        setIsApiKeyModalOpen(true);
+      } else {
+        setSearchResults("Erro ao realizar a pesquisa. Verifique sua conexão ou chave de API.");
+      }
     } finally {
       setIsSearchingGoogle(false);
     }
@@ -430,8 +482,8 @@ export default function App() {
 
     setIsScanning(true);
     try {
-      // Check for API key selection if needed
-      if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
+      // Check for API key selection if needed (Skip if manual key is already set)
+      if (!manualApiKey && window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
         await window.aistudio.openSelectKey();
       }
 
@@ -463,7 +515,15 @@ export default function App() {
         reader.readAsDataURL(file);
       });
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = manualApiKey || process.env.API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        toast.error("Chave API não configurada.");
+        setIsApiKeyModalOpen(true);
+        setIsScanning(false);
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: {
@@ -516,8 +576,17 @@ export default function App() {
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("OCR Error:", error);
+      const errorMsg = error?.message || "";
+      if (errorMsg.includes("Requested entity was not found") || errorMsg.includes("API_KEY_INVALID")) {
+        toast.error("Chave API inválida ou não encontrada. Por favor, configure novamente.");
+        localStorage.removeItem('manual_api_key');
+        setManualApiKey('');
+        setIsApiKeyModalOpen(true);
+      } else {
+        toast.error("Erro ao processar imagem. Verifique sua conexão e chave API.");
+      }
     } finally {
       setIsScanning(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1763,6 +1832,12 @@ export default function App() {
 
       {/* Header */}
       <header className="glass-card sticky top-0 z-50 border-x-0 border-t-0">
+        <ApiKeyModal 
+          isOpen={isApiKeyModalOpen} 
+          onClose={() => setIsApiKeyModalOpen(false)} 
+          onSave={saveApiKey} 
+          currentKey={manualApiKey} 
+        />
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 gold-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-gold-primary/30 border border-white/20">
@@ -1805,6 +1880,18 @@ export default function App() {
                 <span className="hidden sm:inline">Entrar</span>
               </motion.button>
             )}
+
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsApiKeyModalOpen(true)}
+              className="p-3 rounded-2xl border border-gold-primary/30 bg-gold-primary/10 text-gold-primary transition-all flex items-center gap-2 group"
+            >
+              <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">
+                Chave API
+              </span>
+            </motion.button>
 
             <motion.button
               whileHover={{ scale: 1.05 }}
