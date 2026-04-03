@@ -31,7 +31,7 @@ const SetoriaisTab: React.FC<SetoriaisTabProps> = React.memo(({ stats }) => {
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] uppercase font-black tracking-widest text-zinc-500">{sector}</span>
                   <span className="text-xs font-black gold-text">
-                    {stats ? Math.round((stats.sectorCounts[sector as keyof typeof stats.sectorCounts] / stats.total) * 100) : 0}%
+                    {stats ? Math.round(((stats.sectorCounts?.[sector as keyof typeof stats.sectorCounts] || 0) / (stats.total || 1)) * 100) : 0}%
                   </span>
                 </div>
                 <div className="h-40">
@@ -75,9 +75,9 @@ const SetoriaisTab: React.FC<SetoriaisTabProps> = React.memo(({ stats }) => {
             <AnimatePresence>
               {stats && (
                 <>
-                  {Object.entries(stats.sectorCounts).map(([sector, count]) => {
+                  {Object.entries(stats?.sectorCounts || {}).map(([sector, count]) => {
                     const c = count as number;
-                    const p = (c / stats.total) * 100;
+                    const p = (c / (stats?.total || 1)) * 100;
                     const isHot = p > 30;
                     const intensity = Math.min(p / 45, 1); 
                     const opacity = isHot ? 0.3 + (intensity * 0.5) : 0.05;
@@ -107,9 +107,9 @@ const SetoriaisTab: React.FC<SetoriaisTabProps> = React.memo(({ stats }) => {
                     <div className="text-center space-y-4">
                       <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-600 font-black">Setores</div>
                       <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                        {Object.entries(stats.sectorCounts).map(([sector, count]) => {
+                        {Object.entries(stats?.sectorCounts || {}).map(([sector, count]) => {
                           const c = count as number;
-                          const percentage = (c / stats.total);
+                          const percentage = (c / (stats?.total || 1));
                           const isHot = percentage > 0.30;
                           return (
                             <div key={sector} className={`flex flex-col items-center transition-all duration-500 ${isHot ? 'scale-110' : 'opacity-40'}`}>

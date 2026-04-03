@@ -162,18 +162,18 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               <div className="flex items-center justify-between mb-4 relative z-10">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2 mb-1">
-                    <div className={`w-1.5 h-1.5 rounded-full ${ isOmega ? 'bg-red-500 animate-ping' : (stats?.prediction.confidence || 0) > 80 ? 'bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,1)]' : 'bg-zinc-800'}`} />
+                    <div className={`w-1.5 h-1.5 rounded-full ${ isOmega ? 'bg-red-500 animate-ping' : (stats?.prediction?.confidence || 0) > 80 ? 'bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,1)]' : 'bg-zinc-800'}`} />
                     <span className={`text-[8px] font-black uppercase tracking-[0.3em] ${isOmega ? 'text-red-400' : 'text-zinc-500'}`}>
-                      {stats?.prediction.isSniper ? 'Sniper Ativo' : isOmega ? 'Sincronia Crítica' : 'Sincronia do Motor'}
+                      {stats?.prediction?.isSniper ? 'Sniper Ativo' : isOmega ? 'Sincronia Crítica' : 'Sincronia do Motor'}
                     </span>
                   </div>
                   <h3 className={`text-xl font-black uppercase tracking-tighter italic ${isOmega ? 'text-red-500' : 'gold-text'}`}>
-                    {stats?.prediction.isSniper ? 'Fogo Livre' : isOmega ? 'Convergência Ômega' : 'Análise Neural'}
+                    {stats?.prediction?.isSniper ? 'Fogo Livre' : isOmega ? 'Convergência Ômega' : 'Análise Neural'}
                   </h3>
                 </div>
                 <div className="text-right">
                   <div className={`text-4xl font-black leading-none ${isOmega ? 'text-red-500' : 'gold-text'}`}>
-                    {stats?.prediction.isSniper ? stats.prediction.betPercentage : Math.round(stats?.prediction.confidence || 0)}%
+                    {stats?.prediction?.isSniper ? stats.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%
                   </div>
                   <p className="text-[7px] font-black uppercase tracking-widest text-zinc-600 mt-1">Confiança</p>
                 </div>
@@ -182,7 +182,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               <div className="h-2.5 bg-white/5 rounded-full overflow-hidden border border-white/5 p-[1px] relative z-10">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: `${stats?.prediction.isSniper ? stats.prediction.betPercentage : Math.round(stats?.prediction.confidence || 0)}%` }}
+                  animate={{ width: `${stats?.prediction?.isSniper ? stats.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%` }}
                   className={`h-full rounded-full shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all duration-1000 ${isOmega ? 'bg-red-500' : 'bg-gold-primary'}`}
                 />
               </div>
@@ -421,7 +421,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               highlightedNumbers={highlightedNumbers} 
               contextNumbers={contextTargets}
               vacuumNumbers={vacuumNumbers}
-              mainTarget={stats?.prediction.mainTarget}
+              mainTarget={stats?.prediction?.mainTarget}
               targetZone={targetZone} 
               isOmega={isOmega}
               lastNumber={lastNumber}

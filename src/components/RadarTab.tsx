@@ -42,8 +42,8 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {stats?.biases && stats.biases.length > 0 ? (
-                [...stats.biases]
+              {stats?.biases && stats?.biases?.length > 0 ? (
+                [...(stats?.biases || [])]
                   .sort((a, b) => b.confidence - a.confidence)
                   .map((bias, i) => {
                   // Determine target numbers based on bias type/value

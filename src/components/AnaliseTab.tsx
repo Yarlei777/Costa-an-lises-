@@ -16,7 +16,7 @@ const TABLE_ROWS = [
 ];
 
 const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
-  const maxFreq = React.useMemo(() => Math.max(...(stats?.tableHeatmap.map(h => h.frequency) || [1])), [stats?.tableHeatmap]);
+  const maxFreq = React.useMemo(() => Math.max(...(stats?.tableHeatmap?.map(h => h.frequency) || [1])), [stats?.tableHeatmap]);
 
   return (
     <motion.div 
@@ -40,7 +40,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
             <div>
               <p className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold mb-4">Famílias (Atraso)</p>
               <div className="grid grid-cols-3 gap-3">
-                {stats?.terminalAnalysis.families.map((f, i) => (
+                {stats?.terminalAnalysis?.families?.map((f, i) => (
                   <div key={i} className={`p-4 rounded-2xl border transition-all ${f.lastSeen > 7 || f.lastSeen === -1 ? 'bg-gold-primary/10 border-gold-primary/30 shadow-lg shadow-gold-primary/5' : 'bg-black/5 border-black/5'}`}>
                     <div className="text-[10px] font-black text-zinc-500 mb-2">{f.key.toUpperCase()}</div>
                     <div className={`text-lg font-black ${f.lastSeen > 7 || f.lastSeen === -1 ? 'text-gold-primary' : 'text-white'}`}>
@@ -56,7 +56,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
             <div>
               <p className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold mb-4">Espelhos (Equilíbrio)</p>
               <div className="space-y-3">
-                {stats?.terminalAnalysis.mirrors.map((m, i) => {
+                {stats?.terminalAnalysis?.mirrors?.map((m, i) => {
                   const diff = Math.abs(m.f0 - m.f1);
                   return (
                     <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-2xl border border-white/5">
@@ -86,7 +86,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
           
           <div className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats?.terminalGroupData}>
+              <BarChart data={stats?.terminalGroupData || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                 <XAxis 
                   dataKey="name" 
@@ -106,7 +106,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
                   }}
                 />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {stats?.terminalGroupData.map((entry, index) => (
+                  {stats?.terminalGroupData?.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Bar>
@@ -126,9 +126,9 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
               {TABLE_ROWS.map((row, rowIndex) => (
                 <div key={rowIndex} className="flex gap-1">
                   {row.map((num) => {
-                    const freq = stats?.tableHeatmap.find(h => h.num === num)?.frequency || 0;
+                    const freq = stats?.tableHeatmap?.find(h => h.num === num)?.frequency || 0;
                     const intensity = maxFreq > 0 ? (freq / maxFreq) : 0;
-                    const isTarget = stats?.prediction.targets.includes(num);
+                    const isTarget = stats?.prediction?.targets?.includes(num);
                     
                     return (
                       <div 
@@ -162,10 +162,10 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
           
           <div className="grid grid-cols-3 lg:grid-cols-4 gap-4">
             {Array.from({ length: 10 }).map((_, i) => {
-              const freq = (stats?.terminalFrequency[i] as number) || 0;
+              const freq = (stats?.terminalFrequency?.[i] as number) || 0;
               const total = stats?.total || 1;
               const p = Math.round((freq / total) * 100);
-              const isTarget = stats?.prediction.terminal === i;
+              const isTarget = stats?.prediction?.terminal === i;
               
               return (
                 <motion.div 
@@ -209,12 +209,12 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                   <p className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold mb-1">Salto Médio</p>
-                  <p className="text-2xl font-black gold-text">{stats.dealerSignature.avgDist.toFixed(1)} <span className="text-[10px] text-zinc-600">pos.</span></p>
+                  <p className="text-2xl font-black gold-text">{stats?.dealerSignature?.avgDist?.toFixed(1)} <span className="text-[10px] text-zinc-600">pos.</span></p>
                 </div>
                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                   <p className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold mb-1">Variância</p>
-                  <p className={`text-2xl font-black ${stats.dealerSignature.variance < 15 ? 'text-emerald-500' : 'text-white'}`}>
-                    {stats.dealerSignature.variance.toFixed(1)}
+                  <p className={`text-2xl font-black ${(stats?.dealerSignature?.variance || 0) < 15 ? 'text-emerald-500' : 'text-white'}`}>
+                    {stats?.dealerSignature?.variance?.toFixed(1)}
                   </p>
                 </div>
               </div>
@@ -222,7 +222,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
               <div className="space-y-2">
                 <p className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">Últimos 4 Saltos (Wheel Dist)</p>
                 <div className="flex gap-2">
-                  {stats.dealerSignature.distances.map((d, i) => (
+                  {stats?.dealerSignature?.distances?.map((d, i) => (
                     <div key={i} className="flex-1 h-10 bg-white/5 rounded-xl border border-white/5 flex items-center justify-center text-xs font-black text-zinc-400">
                       {d}
                     </div>
@@ -230,7 +230,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
                 </div>
               </div>
 
-              {stats.dealerSignature.variance < 15 && (
+              {(stats?.dealerSignature?.variance || 0) < 15 && (
                 <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
                   <p className="text-[10px] font-bold text-emerald-400 leading-relaxed">
                     O dealer está mantendo um ritmo constante de lançamento. A predição baseada em assinatura está com alta prioridade.
@@ -259,7 +259,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
           <div className="space-y-4">
             {/* Sequence Monitor */}
             <div className="grid grid-cols-3 gap-4 mb-8">
-              {stats?.sequences && Object.entries(stats.sequences).map(([key, seq]) => (
+              {stats?.sequences && Object.entries(stats?.sequences || {}).map(([key, seq]) => (
                 <div key={key} className="p-4 bg-white/5 rounded-2xl border border-white/5">
                   <p className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold mb-2">{key === 'color' ? 'Cores' : key === 'parity' ? 'Paridade' : 'Alto/Baixo'}</p>
                   <div className="flex items-end justify-between">
@@ -282,8 +282,8 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
               ))}
             </div>
 
-            {stats?.biases && stats.biases.length > 0 ? (
-              stats.biases.map((bias, i) => (
+            {stats?.biases && stats?.biases?.length > 0 ? (
+              stats?.biases?.map((bias, i) => (
                 <motion.div 
                   key={i}
                   initial={{ opacity: 0, y: 10 }}

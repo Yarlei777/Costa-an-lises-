@@ -32,7 +32,7 @@ const TerminaisTab: React.FC<TerminaisTabProps> = React.memo(({ stats, history }
             <div className="relative z-10">
               <span className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-500 mb-4 block">Próximo Alvo Sugerido</span>
               <h2 className="text-7xl font-black gold-text tracking-tighter italic mb-2">
-                {stats?.groupPredictions[0].name}
+                {stats?.groupPredictions?.[0]?.name || '---'}
               </h2>
               <p className="text-zinc-400 text-sm font-bold uppercase tracking-widest">
                 Grupo de Terminais com maior probabilidade
@@ -41,20 +41,20 @@ const TerminaisTab: React.FC<TerminaisTabProps> = React.memo(({ stats, history }
               <div className="mt-12 flex items-center gap-10">
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Confiança</span>
-                  <span className="text-4xl font-black text-white">{stats?.groupPredictions[0].confidence}%</span>
+                  <span className="text-4xl font-black text-white">{stats?.groupPredictions?.[0]?.confidence || 0}%</span>
                 </div>
                 <div className="w-px h-12 bg-white/10" />
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Status</span>
-                  <span className={`text-sm font-black uppercase tracking-widest ${stats?.groupPredictions[0].confidence > 75 ? 'text-emerald-500' : 'text-gold-primary'}`}>
-                    {stats?.groupPredictions[0].confidence > 75 ? 'Entrada Forte' : 'Aguardar Confirmação'}
+                  <span className={`text-sm font-black uppercase tracking-widest ${(stats?.groupPredictions?.[0]?.confidence || 0) > 75 ? 'text-emerald-500' : 'text-gold-primary'}`}>
+                    {(stats?.groupPredictions?.[0]?.confidence || 0) > 75 ? 'Entrada Forte' : 'Aguardar Confirmação'}
                   </span>
                 </div>
               </div>
             </div>
 
             <div className="mt-12 grid grid-cols-3 gap-4">
-              {stats?.groupPredictions[0].terminals.map(t => (
+              {stats?.groupPredictions?.[0]?.terminals?.map(t => (
                 <div key={t} className="p-6 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center gap-2">
                   <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Terminal</span>
                   <span className="text-3xl font-black text-white">{t}</span>
@@ -65,7 +65,7 @@ const TerminaisTab: React.FC<TerminaisTabProps> = React.memo(({ stats, history }
 
           {/* Comparison Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {stats?.groupPredictions.map((pred, i) => (
+            {stats?.groupPredictions?.map((pred, i) => (
               <div key={i} className={`p-8 rounded-[2rem] border transition-all ${i === 0 ? 'bg-gold-primary/5 border-gold-primary/30 shadow-xl shadow-gold-primary/5' : 'bg-white/5 border-white/5'}`}>
                 <div className="flex justify-between items-start mb-6">
                   <h3 className="text-2xl font-black text-white">{pred.name}</h3>
@@ -129,12 +129,12 @@ const TerminaisTab: React.FC<TerminaisTabProps> = React.memo(({ stats, history }
             </div>
             
             <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-10 gap-4 relative z-10">
-              {stats?.terminalVacuum.map((v, i) => {
-                const gapInfo = stats.terminalGaps[i];
-                const isRecurrent = v !== -1 && v >= gapInfo.lastCompletedGap - 1 && v <= gapInfo.lastCompletedGap + 1 && gapInfo.lastCompletedGap > 0;
+              {stats?.terminalVacuum?.map((v, i) => {
+                const gapInfo = stats?.terminalGaps?.[i];
+                const isRecurrent = v !== -1 && gapInfo && v >= gapInfo.lastCompletedGap - 1 && v <= gapInfo.lastCompletedGap + 1 && gapInfo.lastCompletedGap > 0;
                 const isHighVacuum = v > 12 || v === -1;
                 
-                const maxRef = Math.max(gapInfo.lastCompletedGap, 15);
+                const maxRef = Math.max(gapInfo?.lastCompletedGap || 0, 15);
                 const progress = v === -1 ? 100 : Math.min((v / maxRef) * 100, 100);
                 
                 return (
