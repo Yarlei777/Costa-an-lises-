@@ -2,6 +2,15 @@ import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'rea
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
 import RouletteWheelVisual from './components/RouletteWheelVisual';
+
+declare global {
+  interface Window {
+    aistudio?: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
+}
 // import ErrorBoundary from './components/ErrorBoundary';
 import { 
   History, 
@@ -421,6 +430,11 @@ export default function App() {
 
     setIsScanning(true);
     try {
+      // Check for API key selection if needed
+      if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
+        await window.aistudio.openSelectKey();
+      }
+
       // Otimização: Redimensionar e comprimir imagem antes de enviar (Max 1280px)
       const compressedBase64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
@@ -451,7 +465,7 @@ export default function App() {
 
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
+        model: "gemini-3-flash-preview",
         contents: {
           parts: [
             {
