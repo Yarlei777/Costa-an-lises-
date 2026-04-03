@@ -19,9 +19,6 @@ interface DashboardTabProps {
   addNumber: (num: number) => void;
   removeLast: () => void;
   clearHistory: () => void;
-  isScanning: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   searchResults?: string | null;
   isSearchingGoogle?: boolean;
   onGoogleSearch?: (query: string) => void;
@@ -44,9 +41,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   addNumber,
   removeLast,
   clearHistory,
-  isScanning,
-  fileInputRef,
-  handleFileChange,
   searchResults,
   isSearchingGoogle,
   onGoogleSearch,
@@ -57,6 +51,9 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   const [isIframeLoading, setIsIframeLoading] = React.useState(false);
   const [iframeKey, setIframeKey] = React.useState(0);
   const [isMaximized, setIsMaximized] = React.useState(false);
+
+  // Get last 10 numbers for preview
+  const recentNumbers = history.slice(0, 10);
 
   React.useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -345,31 +342,39 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
 
         {/* Manual Input Terminal */}
         <section className="glass-card rounded-[2rem] p-8">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Zap className="w-4 h-4 text-gold-primary" />
               <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Entrada de Dados</h2>
             </div>
             <div className="flex items-center gap-2">
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isScanning}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isScanning ? 'bg-zinc-800 text-zinc-600' : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'}`}
-              >
-                {isScanning ? (
-                  <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <Activity className="w-3 h-3 text-gold-primary" />
-                )}
-                {isScanning ? 'Escaneando...' : 'OCR / Imagem'}
-              </button>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                accept="image/*" 
-                className="hidden" 
-              />
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[8px] font-black uppercase tracking-widest text-emerald-500">Manual Ativo</span>
+            </div>
+          </div>
+
+          {/* Recent Numbers Preview */}
+          <div className="mb-8 p-4 bg-black/40 rounded-2xl border border-white/5">
+            <div className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mb-3 flex items-center gap-2">
+              <Activity className="w-3 h-3" /> Últimos Números Adicionados
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide min-h-[40px]">
+              {recentNumbers.length > 0 ? (
+                recentNumbers.map((num, i) => (
+                  <motion.div
+                    key={`${num}-${i}`}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black border border-white/10 shadow-lg ${COLORS[ROULETTE_NUMBERS[num].color]}`}
+                  >
+                    {num}
+                  </motion.div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center w-full py-2">
+                  <span className="text-[8px] text-zinc-700 font-black uppercase tracking-widest italic">Nenhum número inserido</span>
+                </div>
+              )}
             </div>
           </div>
 
