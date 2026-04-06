@@ -12,20 +12,23 @@ const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type }) => {
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[10000]"
-            onClick={onClose}
-          />
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-[600px] md:max-h-[80vh] glass-card rounded-[2rem] p-8 z-[10001] overflow-y-auto"
-          >
+        <motion.div 
+          key="modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[10000]"
+          onClick={onClose}
+        />
+      )}
+      {isOpen && (
+        <motion.div 
+          key="modal-content"
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-[600px] md:max-h-[80vh] glass-card rounded-[2rem] p-8 z-[10001] overflow-y-auto"
+        >
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
                 {type === 'terms' ? <FileText className="w-5 h-5 text-gold-primary" /> : <Lock className="w-5 h-5 text-gold-primary" />}
@@ -75,7 +78,6 @@ const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type }) => {
               <span className="text-[8px] uppercase tracking-[0.4em] font-black">Costa Security Protocol Active</span>
             </div>
           </motion.div>
-        </>
       )}
     </AnimatePresence>
   );

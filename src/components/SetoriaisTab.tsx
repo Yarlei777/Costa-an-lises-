@@ -73,59 +73,58 @@ const SetoriaisTab: React.FC<SetoriaisTabProps> = React.memo(({ stats }) => {
           
           <div className="relative w-full max-w-[320px] aspect-square rounded-full border border-white/5 flex items-center justify-center">
             <AnimatePresence>
-              {stats && (
-                <>
-                  {Object.entries(stats?.sectorCounts || {}).map(([sector, count]) => {
-                    const c = count as number;
-                    const p = (c / (stats?.total || 1)) * 100;
-                    const isHot = p > 30;
-                    const intensity = Math.min(p / 45, 1); 
-                    const opacity = isHot ? 0.3 + (intensity * 0.5) : 0.05;
-                    const blur = isHot ? `${2 + intensity * 10}px` : '1px';
-                    const spread = isHot ? 15 + (intensity * 35) : 0;
+              {stats && Object.entries(stats?.sectorCounts || {}).map(([sector, count]) => {
+                const c = count as number;
+                const p = (c / (stats?.total || 1)) * 100;
+                const isHot = p > 30;
+                const intensity = Math.min(p / 45, 1); 
+                const opacity = isHot ? 0.3 + (intensity * 0.5) : 0.05;
+                const blur = isHot ? `${2 + intensity * 10}px` : '1px';
+                const spread = isHot ? 15 + (intensity * 35) : 0;
 
-                    return (
-                      <motion.div 
-                        key={sector}
-                        initial={{ opacity: 0, scale: 0.9 }} 
-                        animate={{ 
-                          opacity: opacity, 
-                          scale: 1,
-                          boxShadow: isHot ? `0 0 ${spread}px rgba(212, 175, 55, ${0.1 + intensity * 0.4})` : 'none'
-                        }}
-                        transition={{ duration: 1 }}
-                        className={`absolute inset-0 rounded-full border-gold-primary/30 transition-all ${isHot ? 'border-gold-primary/60' : ''}`}
-                        style={{ 
-                          borderWidth: isHot ? `${2 + intensity * 4}px` : '1px',
-                          filter: `blur(${blur})`
-                        }}
-                      />
-                    );
-                  })}
-                  
-                  <div className="absolute inset-6 rounded-full border border-white/5 flex items-center justify-center bg-[#0a0a0a] shadow-inner shadow-white/5">
-                    <div className="text-center space-y-4">
-                      <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-600 font-black">Setores</div>
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                        {Object.entries(stats?.sectorCounts || {}).map(([sector, count]) => {
-                          const c = count as number;
-                          const percentage = (c / (stats?.total || 1));
-                          const isHot = percentage > 0.30;
-                          return (
-                            <div key={sector} className={`flex flex-col items-center transition-all duration-500 ${isHot ? 'scale-110' : 'opacity-40'}`}>
-                              <span className="text-[8px] uppercase text-zinc-500 font-bold">{sector}</span>
-                              <span className={`text-lg font-black ${ isHot ? 'gold-text' : 'text-white'}`}>
-                                {Math.round(percentage * 100)}%
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
+                return (
+                  <motion.div 
+                    key={sector}
+                    initial={{ opacity: 0, scale: 0.9 }} 
+                    animate={{ 
+                      opacity: opacity, 
+                      scale: 1,
+                      boxShadow: isHot ? `0 0 ${spread}px rgba(212, 175, 55, ${0.1 + intensity * 0.4})` : 'none'
+                    }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 1 }}
+                    className={`absolute inset-0 rounded-full border-gold-primary/30 transition-all ${isHot ? 'border-gold-primary/60' : ''}`}
+                    style={{ 
+                      borderWidth: isHot ? `${2 + intensity * 4}px` : '1px',
+                      filter: `blur(${blur})`
+                    }}
+                  />
+                );
+              })}
             </AnimatePresence>
+            
+            {stats && (
+              <div className="absolute inset-6 rounded-full border border-white/5 flex items-center justify-center bg-[#0a0a0a] shadow-inner shadow-white/5">
+                <div className="text-center space-y-4">
+                  <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-600 font-black">Setores</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                    {Object.entries(stats?.sectorCounts || {}).map(([sector, count]) => {
+                      const c = count as number;
+                      const percentage = (c / (stats?.total || 1));
+                      const isHot = percentage > 0.30;
+                      return (
+                        <div key={sector} className={`flex flex-col items-center transition-all duration-500 ${isHot ? 'scale-110' : 'opacity-40'}`}>
+                          <span className="text-[8px] uppercase text-zinc-500 font-bold">{sector}</span>
+                          <span className={`text-lg font-black ${ isHot ? 'gold-text' : 'text-white'}`}>
+                            {Math.round(percentage * 100)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="absolute inset-0 border-8 border-zinc-900 rounded-full" />
             <div className="absolute inset-0 border border-white/10 rounded-full" />
           </div>

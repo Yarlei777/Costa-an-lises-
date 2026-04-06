@@ -1810,6 +1810,7 @@ export default function App() {
         <AnimatePresence>
           {(stats?.prediction?.confidence || 0) > 85 && (
             <motion.div 
+              key="high-confidence-alert"
               initial={{ opacity: 0, y: -10, scale: 0.8 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
