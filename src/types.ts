@@ -1,5 +1,13 @@
 import { LucideIcon } from 'lucide-react';
 
+export interface History {
+  id: string;
+  number: number;
+  timestamp: number;
+  color: 'red' | 'black' | 'green';
+  dropPoint?: number;
+}
+
 export type TabType = 'TERMINAIS' | 'RADAR' | 'DASHBOARD' | 'ANALISE' | 'SETORIAIS' | 'ESTATISTICAS' | 'HISTORICO';
 
 export interface RouletteNumber {

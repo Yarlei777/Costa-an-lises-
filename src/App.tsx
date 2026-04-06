@@ -43,7 +43,8 @@ import {
   MessageSquare,
   Star,
   Award,
-  ZapOff
+  ZapOff,
+  Camera
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -206,6 +207,8 @@ export default function App() {
     sector: 1.0,
     shortTerm: 1.0
   });
+  const [ballisticMode, setBallisticMode] = useState(false);
+  const [currentDropPoint, setCurrentDropPoint] = useState<number | null>(null);
 
   // --- AUTOMATIC WEIGHT BALANCING (BRAIN ADAPTATION) ---
   useEffect(() => {
@@ -370,9 +373,38 @@ export default function App() {
     if (window.navigator.vibrate) {
       window.navigator.vibrate(20);
     }
+    
+    if (ballisticMode) {
+      if (currentDropPoint === null) {
+        setCurrentDropPoint(num);
+        toast.success(`Ponto de soltura: ${num}. Agora selecione onde caiu.`);
+        return;
+      } else {
+        // We have both drop point and landed number
+        // In a real app, we'd store this in a more complex history object.
+        // For now, we'll just store the landed number in the main history,
+        // but we could extend the history state to hold objects if needed.
+        // Let's keep it simple for this iteration and just log it or use it for immediate prediction.
+        const drop = currentDropPoint;
+        const landed = num;
+        
+        // Calculate distance
+        const dropIdx = WHEEL_ORDER.indexOf(drop);
+        const landedIdx = WHEEL_ORDER.indexOf(landed);
+        let distance = (landedIdx - dropIdx + 37) % 37;
+        
+        toast.success(`Bola viajou ${distance} casas. (Soltura: ${drop} -> Caiu: ${landed})`);
+        
+        setCurrentDropPoint(null);
+        setLastNumber(num);
+        setHistory(prev => [num, ...prev].slice(0, 500));
+        return;
+      }
+    }
+
     setLastNumber(num);
     setHistory(prev => [num, ...prev].slice(0, 500));
-  }, []);
+  }, [ballisticMode, currentDropPoint]);
 
   const clearHistory = React.useCallback(() => {
     setHistory([]);
@@ -381,10 +413,6 @@ export default function App() {
 
   const removeLast = React.useCallback(() => {
     setHistory(prev => prev.slice(1));
-  }, []);
-
-  const handleFileChange = React.useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    // OCR Removed
   }, []);
 
   const addCustomRule = () => {
@@ -827,11 +855,35 @@ export default function App() {
     }
 
     // Detecção de Repetição Imediata
-    if (history.length > 0) {
-      const lastTerminal = history[0] % 10;
-      const countLast3 = (history || []).slice(0, 3).filter(n => n % 10 === lastTerminal).length;
-      if (countLast3 >= 2) { // Terminal repetindo agressivamente
-        scores[lastTerminal] += 15;
+    if (history.length >= 2) {
+      const t1 = history[0] % 10;
+      const t2 = history[1] % 10;
+      const t3 = history.length >= 3 ? history[2] % 10 : -1;
+      
+      if (t1 === t2 && t2 === t3) {
+        // Se o terminal se repetiu nas TRÊS últimas rodadas (ex: 6, 26, 16)
+        scores[t1] += 500 * engineWeights.bias; // Bônus extremo
+        
+        detectedBiases.push({
+          type: 'Terminal Triplo',
+          value: `Terminal ${t1} chamou 3x seguidas`,
+          confidence: 99
+        });
+      } else if (t1 === t2) {
+        // Se o terminal se repetiu nas DUAS últimas rodadas
+        scores[t1] += 300 * engineWeights.bias; // Bônus massivo para o terminal
+        
+        detectedBiases.push({
+          type: 'Terminal Repetido',
+          value: `Terminal ${t1} chamando Terminal ${t1}`,
+          confidence: 99
+        });
+      } else {
+        // Fallback para a lógica antiga de repetição em 3 rodadas (não consecutivas)
+        const countLast3 = (history || []).slice(0, 3).filter(n => n % 10 === t1).length;
+        if (countLast3 >= 2) {
+          scores[t1] += 15;
+        }
       }
     }
 
@@ -1082,6 +1134,50 @@ export default function App() {
       }
     }
 
+    // --- CAMADA 13.5: BALLISTIC MODE (PONTO DE SOLTURA) ---
+    // If ballistic mode is active and we have a drop point waiting, we predict based on historical distances.
+    // Since we don't have a complex history object with drop points yet, we'll use the basic dealer signature
+    // average distance calculated above, but applied to the *currentDropPoint* instead of the last landed number.
+    if (ballisticMode && currentDropPoint !== null) {
+      // Calculate average distance from recent history (assuming last number was the drop point for the current number)
+      // This is a simplified ballistic model. A full model would require storing drop points in history.
+      const distances: number[] = [];
+      for (let i = 0; i < Math.min(10, history.length - 1); i++) {
+        const currentIdx = WHEEL_ORDER.indexOf(history[i]);
+        const prevIdx = WHEEL_ORDER.indexOf(history[i+1]);
+        let dist = currentIdx - prevIdx;
+        if (dist < 0) dist += 37;
+        distances.push(dist);
+      }
+      
+      if (distances.length > 0) {
+        // Find most frequent distance (mode) or use average if variance is low
+        const distFreq: Record<number, number> = {};
+        distances.forEach(d => distFreq[d] = (distFreq[d] || 0) + 1);
+        const mostFrequentDist = parseInt(Object.keys(distFreq).reduce((a, b) => distFreq[parseInt(a)] > distFreq[parseInt(b)] ? a : b));
+        
+        const dropIdx = WHEEL_ORDER.indexOf(currentDropPoint);
+        const predictedIdx = (dropIdx + mostFrequentDist) % 37;
+        const predictedNum = WHEEL_ORDER[predictedIdx];
+        
+        // Massive boost for ballistic prediction
+        numberScores[predictedNum] += 500; 
+        
+        // Boost neighbors
+        for (let offset = -2; offset <= 2; offset++) {
+          if (offset === 0) continue;
+          const idx = (predictedIdx + offset + 37) % 37;
+          numberScores[WHEEL_ORDER[idx]] += 200;
+        }
+
+        detectedBiases.push({
+          type: 'Balística Ativa',
+          value: `Alvo: ${predictedNum} (Salto: +${mostFrequentDist})`,
+          confidence: 99
+        });
+      }
+    }
+
     // --- CAMADA 14: Z-SCORE (DESVIO PADRÃO ESTATÍSTICO) ---
     const expectedFreq = history.length / 37;
     const terminalExpectedFreq = history.length / 10;
@@ -1131,31 +1227,110 @@ export default function App() {
       return uniqueNums / 15; // 1.0 = Caos total, 0.1 = Padrão repetitivo
     })();
 
-    // --- CAMADA 17: CROSS-TERMINAL CONVERGENCE ---
-    if (history.length >= 2) {
-      const lastT = history[0] % 10;
-      const prevT = history[1] % 10;
+    // --- CAMADA 17: DYNAMIC CROSS-TERMINAL CONVERGENCE (HISTORICAL ANALYSIS) ---
+    if (history.length >= 5) {
+      const currentTerminal = history[0] % 10;
+      const nextTerminalCounts: Record<number, number> = {};
       
-      // Padrões comuns de "chamada" de terminais
+      // Analisa o histórico para ver qual terminal costuma vir DEPOIS do terminal atual
+      // history[0] é o atual. history[1] é o anterior.
+      // Se history[i] é o terminal atual, o que veio depois dele é history[i-1]
+      for (let i = 1; i < history.length; i++) {
+        if (history[i] % 10 === currentTerminal) {
+          const nextT = history[i - 1] % 10;
+          nextTerminalCounts[nextT] = (nextTerminalCounts[nextT] || 0) + 1;
+        }
+      }
+
+      let maxCount = 0;
+      let bestNextTerminals: number[] = [];
+      
+      Object.entries(nextTerminalCounts).forEach(([tStr, count]) => {
+        if (count > maxCount) {
+          maxCount = count;
+          bestNextTerminals = [Number(tStr)];
+        } else if (count === maxCount && count > 0) {
+          bestNextTerminals.push(Number(tStr));
+        }
+      });
+
+      // Se o terminal atual tem um histórico de chamar um terminal específico (incluindo ele mesmo)
+      if (maxCount >= 2) {
+        bestNextTerminals.forEach(t => {
+          scores[t] += 120 * engineWeights.bias; // Bônus forte para convergência histórica
+        });
+        
+        detectedBiases.push({
+          type: 'Sequência Histórica',
+          value: `T${currentTerminal} chama T${bestNextTerminals.join(', T')} (${maxCount}x no histórico)`,
+          confidence: Math.min(75 + (maxCount * 8), 99)
+        });
+      }
+      
+      // Mantém a lógica de padrões comuns como fallback
       const terminalCalls: Record<number, number[]> = {
         1: [4, 7], 2: [5, 8], 3: [6, 9],
         0: [0, 5], 5: [0, 5], 8: [2, 1]
       };
-
-      if (terminalCalls[prevT]?.includes(lastT)) {
-        const nextPossible = terminalCalls[lastT] || [];
-        nextPossible.forEach(t => {
-          scores[t] += 35 * engineWeights.bias;
-        });
-        
-        if (nextPossible.length > 0) {
-          detectedBiases.push({
-            type: 'Sequência',
-            value: `Convergência T${prevT}→T${lastT}`,
-            confidence: 75
+      
+      if (history.length >= 2) {
+        const prevT = history[1] % 10;
+        if (terminalCalls[prevT]?.includes(currentTerminal)) {
+          const nextPossible = terminalCalls[currentTerminal] || [];
+          nextPossible.forEach(t => {
+            scores[t] += 35 * engineWeights.bias;
           });
         }
       }
+    }
+
+    // --- CAMADA 18: APPROXIMATION ENGINE (BUSCA DE TERMINAL POR VIZINHOS) ---
+    if (history.length >= 10) {
+      const scanLength = Math.min(30, history.length);
+      const recentSpins = history.slice(0, scanLength); // Analisa até os últimos 30 giros
+      const terminalApproximations: Record<number, number> = {};
+      
+      // Para cada terminal de 0 a 9, verifica se os vizinhos dos números desse terminal caíram recentemente
+      for (let t = 0; t <= 9; t++) {
+        const terminalNums = Array.from({length: 37}, (_, i) => i).filter(n => n % 10 === t);
+        let neighborHits = 0;
+        
+        terminalNums.forEach(tNum => {
+          const idx = WHEEL_ORDER.indexOf(tNum);
+          if (idx !== -1) {
+            const leftNeighbor = WHEEL_ORDER[(idx - 1 + 37) % 37];
+            const rightNeighbor = WHEEL_ORDER[(idx + 1) % 37];
+            
+            // Conta todas as vezes que os vizinhos caíram na janela de 30 giros
+            neighborHits += recentSpins.filter(n => n === leftNeighbor).length;
+            neighborHits += recentSpins.filter(n => n === rightNeighbor).length;
+          }
+        });
+        
+        // Expectativa matemática: (número de vizinhos) * (giros / 37)
+        const expectedHits = (terminalNums.length * 2) * (scanLength / 37);
+        
+        // Dispara se os acertos nos vizinhos forem significativamente maiores que o esperado (50% a mais)
+        if (neighborHits >= expectedHits * 1.5 && neighborHits >= 5) {
+          terminalApproximations[t] = neighborHits;
+        }
+      }
+      
+      Object.entries(terminalApproximations).forEach(([tStr, hits]) => {
+        const t = Number(tStr);
+        scores[t] += 150 * engineWeights.bias; // Peso muito alto para essa assinatura
+        
+        // Adiciona pontuação direta aos números do terminal
+        Array.from({length: 37}, (_, i) => i).filter(n => n % 10 === t).forEach(n => {
+          numberScores[n] += 100 * engineWeights.bias;
+        });
+
+        detectedBiases.push({
+          type: 'Assinatura',
+          value: `Aproximação: Buscando Terminal ${t} (${hits} vizinhos em ${scanLength} giros)`,
+          confidence: Math.min(75 + (hits * 2), 99)
+        });
+      });
     }
 
     // --- CAMADA 19: SHORT-TERM CONVERGENCE (LAST 10) ---
@@ -1239,7 +1414,10 @@ export default function App() {
       (b.type === 'Vácuo Recorrente' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
       (b.type === 'Assinatura' && WHEEL_ORDER.indexOf(mainTarget) >= WHEEL_ORDER.indexOf(history[0]) - 2 && WHEEL_ORDER.indexOf(mainTarget) <= WHEEL_ORDER.indexOf(history[0]) + 2) ||
       (b.type === 'Desvio Padrão' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-      (MIRROR_NUMBERS_LIST.includes(mainTarget) && b.type === 'Espelho Direto')
+      (MIRROR_NUMBERS_LIST.includes(mainTarget) && b.type === 'Espelho Direto') ||
+      (b.type === 'Terminal Repetido' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
+      (b.type === 'Terminal Triplo' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
+      (b.type === 'Sequência Histórica' && b.value.includes(`T${mainTarget % 10}`))
     );
     
     const isSniper = (mainScore > 450 && sniperBiases.length >= 2) || (mainScore > 600);
@@ -1347,8 +1525,8 @@ export default function App() {
     };
   }, [history, engineWeights]);
 
-  const { highlightedNumbers, vacuumNumbers, targetZone, isOmega } = useMemo(() => {
-    if (!stats) return { highlightedNumbers: [], vacuumNumbers: [], targetZone: "", isOmega: false };
+  const { highlightedNumbers, allCylinderTargets, vacuumNumbers, targetZone, isOmega } = useMemo(() => {
+    if (!stats) return { highlightedNumbers: [], allCylinderTargets: [], vacuumNumbers: [], targetZone: "", isOmega: false };
 
     const highlighted = new Set<number>();
     const vacuum = new Set<number>();
@@ -1392,10 +1570,30 @@ export default function App() {
     // Final safety check: strictly limit to 8
     const finalHighlighted = Array.from(highlighted).slice(0, 8);
 
+    // Compute all targets including mirrors for the notification
+    const allTargetsSet = new Set<number>(finalHighlighted);
+    finalHighlighted.forEach(num => {
+      [...ESPELHOS_CFG.digitMirrorPairs, ...ESPELHOS_CFG.pairs].forEach(pair => {
+        if (pair[0] === num) allTargetsSet.add(pair[1]);
+        else if (pair[1] === num) allTargetsSet.add(pair[0]);
+      });
+    });
+    
+    // Add vacuum numbers
+    vacuum.forEach(num => allTargetsSet.add(num));
+    
+    // Add context targets
+    if (stats.contextTargets) {
+      stats.contextTargets.forEach(num => allTargetsSet.add(num));
+    }
+    
+    const allCylinderTargets = Array.from(allTargetsSet).sort((a, b) => a - b);
+
     const sniperText = stats.prediction.isSniper ? `🎯 SNIPER: ${stats.prediction.betPercentage}% 🎯` : "⚠️ ALERTA OMEGA ⚠️";
 
     return { 
       highlightedNumbers: finalHighlighted, 
+      allCylinderTargets,
       vacuumNumbers: Array.from(vacuum),
       targetZone: omegaCondition ? sniperText : (zones.join(' + ') || "Monitorando"),
       isOmega: omegaCondition
@@ -1408,7 +1606,7 @@ export default function App() {
     
     // 1. Analyze confidence scores of all detected biases and prioritize alerts
     // for those with confidence greater than 85%.
-    const highConfidenceBiases = stats?.biases.filter(b => b.confidence > 85) || [];
+    const highConfidenceBiases = stats?.biases?.filter(b => b.confidence > 85) || [];
     
     highConfidenceBiases.forEach(bias => {
       const alertMsg = `${bias.type.toUpperCase()}: ${bias.value} (${bias.confidence}%)`;
@@ -1603,22 +1801,29 @@ export default function App() {
           className="h-full liquid-progress"
           initial={{ width: 0 }}
           animate={{ 
-            width: `${stats?.prediction.confidence || 0}%`,
-            background: (stats?.prediction.confidence || 0) > 70 ? '#22c55e' : '#222',
-            boxShadow: (stats?.prediction.confidence || 0) > 85 ? '0 0 30px rgba(34, 197, 94, 0.6)' : 'none'
+            width: `${stats?.prediction?.confidence || 0}%`,
+            background: (stats?.prediction?.confidence || 0) > 70 ? '#22c55e' : '#222',
+            boxShadow: (stats?.prediction?.confidence || 0) > 85 ? '0 0 30px rgba(34, 197, 94, 0.6)' : 'none'
           }}
           transition={{ duration: 0.8, ease: "easeInOut" }}
         />
         <AnimatePresence>
-          {(stats?.prediction.confidence || 0) > 85 && (
+          {(stats?.prediction?.confidence || 0) > 85 && (
             <motion.div 
               initial={{ opacity: 0, y: -10, scale: 0.8 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
-              className="absolute top-4 left-1/2 -translate-x-1/2 px-8 py-2.5 neon-green-gradient rounded-full text-[12px] font-black text-black tracking-[0.4em] uppercase shadow-[0_0_50px_rgba(34, 197, 94, 0.8)] flex items-center gap-3 border border-white/20"
+              className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 neon-green-gradient rounded-xl text-[10px] font-black text-black tracking-widest uppercase shadow-[0_0_30px_rgba(34,197,94,0.6)] flex items-center gap-2 border border-white/20 max-w-[95vw] w-max"
             >
-              <Zap className="w-4 h-4 animate-bounce fill-black" />
-              ALVOS: {stats?.prediction.targets?.join(', ')}
+              <Zap className="w-3.5 h-3.5 animate-bounce fill-black shrink-0" />
+              <div className="flex flex-wrap items-center justify-center gap-1">
+                <span className="opacity-80 mr-1">ALVOS:</span>
+                {allCylinderTargets.map((num, i) => (
+                  <span key={num} className="bg-black/20 px-1.5 py-0.5 rounded text-[9px]">
+                    {num}
+                  </span>
+                ))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1696,7 +1901,7 @@ export default function App() {
           {[
             { id: 'DASHBOARD', label: 'Dashboard', icon: Activity },
             { id: 'TERMINAIS', label: 'Terminais', icon: Zap },
-            { id: 'RADAR', label: 'Radar de Viés', icon: Radar, badge: (stats?.biases.length || 0) + customRules.filter(r => {
+            { id: 'RADAR', label: 'Radar de Viés', icon: Radar, badge: (stats?.biases?.length || 0) + customRules.filter(r => {
               if (!r.enabled || (history || []).length < r.threshold) return false;
               const lastN = (history || []).slice(0, r.threshold).map(n => ROULETTE_NUMBERS[n]);
               switch (r.type) {
@@ -1775,6 +1980,12 @@ export default function App() {
               onGoogleSearch={handleGoogleSearch}
               browserUrl={browserUrl}
               onClearBrowser={() => setBrowserUrl(null)}
+              ballisticMode={ballisticMode}
+              currentDropPoint={currentDropPoint}
+              onToggleBallisticMode={() => {
+                setBallisticMode(!ballisticMode);
+                setCurrentDropPoint(null);
+              }}
             />
           </Suspense>
         </div>

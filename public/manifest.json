@@ -2,7 +2,7 @@
   "name": "Costa Análises | Terminal de Elite",
   "short_name": "CostaAnálises",
   "description": "Terminal de Elite para Predição Avançada em Roleta Europeia",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#050505",
   "theme_color": "#D4AF37",

@@ -1,9 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Zap, Activity, Target, Search, Loader2, ExternalLink, X, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
+import { Zap, Activity, Target, Search, Loader2, ExternalLink, X, RotateCcw, Maximize2, Minimize2, Camera } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { Stats, RouletteNumber } from '../types';
-import { COLORS, ROULETTE_NUMBERS, MIRROR_NUMBERS_LIST } from '../constants';
+import { COLORS, ROULETTE_NUMBERS, MIRROR_NUMBERS_LIST, ESPELHOS_CFG } from '../constants';
 import RouletteWheelVisual from './RouletteWheelVisual';
 
 interface DashboardTabProps {
@@ -24,6 +24,9 @@ interface DashboardTabProps {
   onGoogleSearch?: (query: string) => void;
   browserUrl?: string | null;
   onClearBrowser?: () => void;
+  ballisticMode?: boolean;
+  currentDropPoint?: number | null;
+  onToggleBallisticMode?: () => void;
 }
 
 const INPUT_NUMBERS = Array.from({ length: 37 }, (_, i) => i);
@@ -45,7 +48,10 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   isSearchingGoogle,
   onGoogleSearch,
   browserUrl,
-  onClearBrowser
+  onClearBrowser,
+  ballisticMode,
+  currentDropPoint,
+  onToggleBallisticMode
 }) => {
   const [searchValue, setSearchValue] = React.useState('');
   const [isIframeLoading, setIsIframeLoading] = React.useState(false);
@@ -90,6 +96,62 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       setIsMaximized(false);
     }
   };
+
+  const allCylinderTargets = React.useMemo(() => {
+    const targetsMap = new Map<number, { num: number; confidence: number; isMirrorOnly: boolean }>();
+    
+    // First, add all highlighted numbers with their original confidence
+    highlightedNumbers.forEach(num => {
+      const confObj = stats?.prediction?.targetsWithConfidence?.find(t => t.num === num);
+      targetsMap.set(num, {
+        num,
+        confidence: confObj ? confObj.confidence : 85, // Default high confidence if not found
+        isMirrorOnly: false
+      });
+    });
+    
+    // Then, add mirrors for the highlighted numbers
+    highlightedNumbers.forEach(num => {
+      [...ESPELHOS_CFG.digitMirrorPairs, ...ESPELHOS_CFG.pairs].forEach(pair => {
+        let mirrorNum: number | null = null;
+        if (pair[0] === num) mirrorNum = pair[1];
+        else if (pair[1] === num) mirrorNum = pair[0];
+        
+        if (mirrorNum !== null && !targetsMap.has(mirrorNum)) {
+          const originalConf = targetsMap.get(num)?.confidence || 85;
+          targetsMap.set(mirrorNum, {
+            num: mirrorNum,
+            confidence: Math.max(originalConf - 5, 50), // Slightly lower confidence for mirrors
+            isMirrorOnly: true
+          });
+        }
+      });
+    });
+    
+    // Add vacuum numbers
+    vacuumNumbers.forEach(num => {
+      if (!targetsMap.has(num)) {
+        targetsMap.set(num, {
+          num,
+          confidence: 70, // Default confidence for vacuum numbers
+          isMirrorOnly: false
+        });
+      }
+    });
+
+    // Add context targets
+    contextTargets.forEach(num => {
+      if (!targetsMap.has(num)) {
+        targetsMap.set(num, {
+          num,
+          confidence: 65, // Default confidence for context targets
+          isMirrorOnly: false
+        });
+      }
+    });
+    
+    return Array.from(targetsMap.values()).sort((a, b) => b.confidence - a.confidence);
+  }, [highlightedNumbers, stats?.prediction?.targetsWithConfidence, vacuumNumbers, contextTargets]);
 
   return (
     <motion.div 
@@ -173,7 +235,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                 </div>
                 <div className="text-right">
                   <div className={`text-4xl font-black leading-none ${isOmega ? 'text-red-500' : 'gold-text'}`}>
-                    {stats?.prediction?.isSniper ? stats.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%
+                    {stats?.prediction?.isSniper ? stats?.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%
                   </div>
                   <p className="text-[7px] font-black uppercase tracking-widest text-zinc-600 mt-1">Confiança</p>
                 </div>
@@ -182,7 +244,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               <div className="h-2.5 bg-white/5 rounded-full overflow-hidden border border-white/5 p-[1px] relative z-10">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: `${stats?.prediction?.isSniper ? stats.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%` }}
+                  animate={{ width: `${stats?.prediction?.isSniper ? stats?.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%` }}
                   className={`h-full rounded-full shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all duration-1000 ${isOmega ? 'bg-red-500' : 'bg-gold-primary'}`}
                 />
               </div>
@@ -259,11 +321,11 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{targetZone}</div>
             </div>
             
-            <div className="space-y-3">
-              {stats?.prediction?.targetsWithConfidence?.slice(0, 5).map((target, idx) => {
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {allCylinderTargets.map((target, idx) => {
                 const num = target.num;
                 const score = target.confidence;
-                const isMirror = MIRROR_NUMBERS_LIST.includes(num);
+                const isMirror = target.isMirrorOnly || MIRROR_NUMBERS_LIST.includes(num);
                 return (
                   <motion.div 
                     key={num} 
@@ -345,11 +407,29 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Zap className="w-4 h-4 text-gold-primary" />
-              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Entrada de Dados</h2>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Entrada de Dados</h2>
+                {ballisticMode && (
+                  <p className="text-[9px] text-emerald-500 uppercase tracking-widest font-bold mt-1">
+                    {currentDropPoint === null ? 'Aguardando Ponto de Soltura...' : `Soltura: ${currentDropPoint} | Aguardando Queda...`}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[8px] font-black uppercase tracking-widest text-emerald-500">Manual Ativo</span>
+              <button
+                onClick={onToggleBallisticMode}
+                className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-2 ${
+                  ballisticMode 
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
+                    : 'bg-white/5 border-white/10 text-zinc-500 hover:bg-white/10'
+                }`}
+              >
+                <Target className={`w-3.5 h-3.5 ${ballisticMode ? 'animate-pulse' : ''}`} />
+                <span className="text-[9px] font-black uppercase tracking-widest">
+                  {ballisticMode ? 'Balística ON' : 'Balística OFF'}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -390,20 +470,22 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mt-8">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 mt-8">
             <button 
               onClick={removeLast}
-              className="py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 transition-all flex items-center justify-center gap-2"
+              className="py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 transition-all flex items-center justify-center gap-2"
             >
               <Activity className="w-3 h-3" />
-              Remover Último
+              <span className="hidden sm:inline">Remover Último</span>
+              <span className="sm:hidden">Desfazer</span>
             </button>
             <button 
               onClick={clearHistory}
-              className="py-4 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-red-500 transition-all flex items-center justify-center gap-2"
+              className="py-4 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-red-500 transition-all flex items-center justify-center gap-2"
             >
               <Zap className="w-3 h-3" />
-              Limpar Tudo
+              <span className="hidden sm:inline">Limpar Tudo</span>
+              <span className="sm:hidden">Limpar</span>
             </button>
           </div>
         </section>
@@ -483,7 +565,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             </div>
           </div>
           <div className="space-y-4">
-            {stats?.biases && stats.biases.length > 0 ? (
+            {stats?.biases && stats?.biases?.length > 0 ? (
               [...(stats?.biases || [])]
                 .sort((a, b) => b.confidence - a.confidence)
                 .slice(0, 4)
@@ -592,7 +674,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                 : 'h-[600px] lg:h-[750px]'
             }`}>
               {browserUrl ? (
-                <div className="w-full h-full relative">
+                <div className="w-full h-full relative group">
                   {isIframeLoading && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10 space-y-4">
                       <Loader2 className="w-12 h-12 text-gold-primary animate-spin" />
@@ -612,25 +694,25 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                     sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-storage-access-by-user-activation"
                     referrerPolicy="no-referrer"
                   />
-                  <div className="absolute top-4 left-4 z-20">
+                  <div className="absolute top-4 left-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     <div className="bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                       <span className="text-[8px] text-zinc-300 font-mono truncate max-w-[200px]">{browserUrl}</span>
                     </div>
                   </div>
-                    <div className="absolute top-4 right-4 flex space-x-2 z-20">
-                      {isMaximized && (
-                        <p className="text-[8px] text-zinc-500 uppercase tracking-widest self-center mr-2 hidden md:block">Pressione ESC para sair</p>
-                      )}
-                      <button 
-                        onClick={() => setIsMaximized(!isMaximized)}
-                        className="bg-zinc-800/80 hover:bg-zinc-700/80 text-white p-2 rounded-lg backdrop-blur-md border border-white/10 transition-all"
-                        title={isMaximized ? "Minimizar" : "Maximizar"}
-                      >
-                        {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                      </button>
-                      <button 
-                        onClick={handleRefreshIframe}
+                  <div className="absolute top-4 right-4 flex space-x-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    {isMaximized && (
+                      <p className="text-[8px] text-zinc-500 uppercase tracking-widest self-center mr-2 hidden md:block">Pressione ESC para sair</p>
+                    )}
+                    <button 
+                      onClick={() => setIsMaximized(!isMaximized)}
+                      className="bg-zinc-800/80 hover:bg-zinc-700/80 text-white p-2 rounded-lg backdrop-blur-md border border-white/10 transition-all"
+                      title={isMaximized ? "Minimizar" : "Maximizar"}
+                    >
+                      {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                    </button>
+                    <button 
+                      onClick={handleRefreshIframe}
                       className="bg-zinc-800/80 hover:bg-zinc-700/80 text-white p-2 rounded-lg backdrop-blur-md border border-white/10 transition-all"
                       title="Recarregar"
                     >
@@ -645,10 +727,10 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                     </button>
                     <button 
                       onClick={() => window.open(browserUrl, '_blank')}
-                      className="bg-gold-primary/20 hover:bg-gold-primary/40 text-gold-primary px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-2 backdrop-blur-md border border-gold-primary/30 transition-all"
+                      className="bg-gold-primary/20 hover:bg-gold-primary/40 text-gold-primary p-2 rounded-lg backdrop-blur-md border border-gold-primary/30 transition-all"
+                      title="Abrir em Nova Aba"
                     >
-                      <ExternalLink className="w-3 h-3" />
-                      <span>Abrir em Nova Aba</span>
+                      <ExternalLink className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 px-4 py-2 rounded-full border border-white/10 backdrop-blur-md pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
