@@ -44,14 +44,12 @@ const HistoricoTab: React.FC<HistoricoTabProps> = React.memo(({ history, setHist
               [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36].includes(num) ? 'bg-red-600 text-white' : 'bg-zinc-900 text-white';
             
             return (
-              <motion.div
-                key={`${num}-${i}`}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className={`aspect-square rounded-xl flex items-center justify-center text-sm font-black border border-white/10 shadow-lg ${color}`}
+              <div
+                key={`${num}-${history.length - i}`}
+                className={`aspect-square rounded-xl flex items-center justify-center text-sm font-black border border-white/10 shadow-lg animate-in zoom-in duration-300 ${color}`}
               >
                 {num}
-              </motion.div>
+              </div>
             );
           })}
           {history.length === 0 && (

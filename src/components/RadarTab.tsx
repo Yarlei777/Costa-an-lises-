@@ -86,12 +86,10 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                     const isMirrorBias = bias.type.includes('Espelho');
 
                     return (
-                      <motion.div 
-                        key={i}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                        className={`p-3 rounded-xl bg-white/5 border relative overflow-hidden group transition-all ${isMirrorBias ? 'border-pink-500/20 hover:border-pink-500/40' : 'border-white/10 hover:border-gold-primary/30'}`}
+                      <div 
+                        key={`${bias.type}-${bias.value}`}
+                        className={`p-3 rounded-xl bg-white/5 border relative overflow-hidden group transition-all animate-in fade-in slide-in-from-bottom-4 duration-500 ${isMirrorBias ? 'border-pink-500/20 hover:border-pink-500/40' : 'border-white/10 hover:border-gold-primary/30'}`}
+                        style={{ animationDelay: `${i * 100}ms`, animationFillMode: 'both' }}
                       >
                         <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition-opacity">
                           <Target className={`w-8 h-8 ${isMirrorBias ? 'text-pink-500' : 'text-gold-primary'}`} />
@@ -163,7 +161,7 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                             </button>
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     );
                 })
               ) : (
@@ -235,18 +233,16 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                 if (!isMatch) return null;
 
                 return (
-                  <motion.div 
+                  <div 
                     key={rule.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between"
+                    className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between animate-in zoom-in-95 duration-300"
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       <span className="text-[10px] font-black text-white uppercase tracking-tight">{ruleLabel}</span>
                     </div>
                     <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest">Ativo</span>
-                  </motion.div>
+                  </div>
                 );
               })}
             </div>

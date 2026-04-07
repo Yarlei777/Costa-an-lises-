@@ -265,7 +265,7 @@ const TerminaisTab: React.FC<TerminaisTabProps> = React.memo(({ stats, history }
                 else if ([3, 6, 9].includes(terminal)) group = "3.6.9";
                 
                 return (
-                  <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                  <div key={`${num}-${history.length - i}`} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black ${COLORS[ROULETTE_NUMBERS[num].color]}`}>
                         {num}

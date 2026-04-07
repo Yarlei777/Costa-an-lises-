@@ -330,16 +330,9 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                   <motion.div 
                     key={num} 
                     initial={{ opacity: 0, y: 20 }}
-                    animate={{ 
-                      opacity: 1, 
-                      y: 0,
-                      boxShadow: isOmega ? ['0 0 0px rgba(239,68,68,0)', '0 0 20px rgba(239,68,68,0.2)', '0 0 0px rgba(239,68,68,0)'] : 'none'
-                    }}
-                    transition={{ 
-                      delay: idx * 0.1,
-                      boxShadow: { duration: 3, repeat: Infinity }
-                    }}
-                    className={`p-4 bg-gradient-to-br from-white/10 to-transparent backdrop-blur-xl rounded-2xl border flex items-center gap-5 relative group overflow-hidden transition-all hover:translate-x-2 ${isOmega ? 'border-red-500/30' : isMirror ? 'border-pink-500/40 shadow-[0_0_15px_rgba(236,72,153,0.1)] animate-pulse' : 'border-gold-primary/20'}`}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className={`p-4 bg-gradient-to-br from-white/10 to-transparent backdrop-blur-xl rounded-2xl border flex items-center gap-5 relative group overflow-hidden transition-all hover:translate-x-2 ${isOmega ? 'border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.2)] animate-pulse' : isMirror ? 'border-pink-500/40 shadow-[0_0_15px_rgba(236,72,153,0.1)] animate-pulse' : 'border-gold-primary/20'}`}
                   >
                     <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${isOmega ? 'bg-red-500/10' : isMirror ? 'bg-pink-500/10' : 'bg-gold-primary/10'}`} />
                     
@@ -441,14 +434,12 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide min-h-[40px]">
               {recentNumbers.length > 0 ? (
                 recentNumbers.map((num, i) => (
-                  <motion.div
-                    key={`${num}-${i}`}
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black border border-white/10 shadow-lg ${COLORS[ROULETTE_NUMBERS[num].color]}`}
+                  <div
+                    key={`${num}-${history.length - i}`}
+                    className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black border border-white/10 shadow-lg animate-in zoom-in duration-300 ${COLORS[ROULETTE_NUMBERS[num].color]}`}
                   >
                     {num}
-                  </motion.div>
+                  </div>
                 ))
               ) : (
                 <div className="flex items-center justify-center w-full py-2">

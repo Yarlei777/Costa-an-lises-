@@ -145,21 +145,53 @@ import { neuralEngine } from './services/neuralEngine';
 import { auth, loginWithGoogle, logout, saveUserSession, getUserSession } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
+// Utility to handle chunk load errors for lazy components
+const lazyRetry = (componentImport: () => Promise<any>) => {
+  return lazy(async () => {
+    try {
+      return await componentImport();
+    } catch (error) {
+      // Check if it's a chunk load error
+      if (error instanceof Error && 
+         (error.message.includes('Failed to fetch dynamically imported module') || 
+          error.message.includes('Importing a module script failed'))) {
+        // Force a page reload to get the latest version
+        window.location.reload();
+        return { default: () => null };
+      }
+      throw error;
+    }
+  });
+};
+
 // Lazy-loaded components
-const DashboardTab = lazy(() => import("./components/DashboardTab"));
-const AnaliseTab = lazy(() => import("./components/AnaliseTab"));
-const SetoriaisTab = lazy(() => import("./components/SetoriaisTab"));
-const EstatisticasTab = lazy(() => import("./components/EstatisticasTab"));
-const HistoricoTab = lazy(() => import("./components/HistoricoTab"));
-const TerminaisTab = lazy(() => import("./components/TerminaisTab"));
-const RadarTab = lazy(() => import("./components/RadarTab"));
-const LegalModal = lazy(() => import("./components/LegalModals"));
+const DashboardTab = lazyRetry(() => import("./components/DashboardTab"));
+const AnaliseTab = lazyRetry(() => import("./components/AnaliseTab"));
+const SetoriaisTab = lazyRetry(() => import("./components/SetoriaisTab"));
+const EstatisticasTab = lazyRetry(() => import("./components/EstatisticasTab"));
+const HistoricoTab = lazyRetry(() => import("./components/HistoricoTab"));
+const TerminaisTab = lazyRetry(() => import("./components/TerminaisTab"));
+const RadarTab = lazyRetry(() => import("./components/RadarTab"));
+const LegalModal = lazyRetry(() => import("./components/LegalModals"));
 
 // Loading fallback component
 const TabLoading = () => (
-  <div className="flex flex-col items-center justify-center py-40 space-y-4">
-    <div className="w-12 h-12 rounded-full border-2 border-gold-primary/20 border-t-gold-primary animate-spin" />
-    <span className="text-[10px] font-black text-gold-primary uppercase tracking-[0.3em] animate-pulse">Carregando Módulo...</span>
+  <div className="flex flex-col items-center justify-center py-40 space-y-6">
+    <div className="relative">
+      <div className="w-16 h-16 rounded-full border-2 border-gold-primary/10 border-t-gold-primary animate-spin" />
+      <div className="absolute inset-0 w-16 h-16 rounded-full border-2 border-gold-primary/5 border-b-gold-primary/40 animate-spin-slow" />
+    </div>
+    <div className="flex flex-col items-center gap-2">
+      <span className="text-[10px] font-black text-gold-primary uppercase tracking-[0.4em] animate-pulse">Sincronizando Módulo</span>
+      <div className="w-32 h-1 bg-white/5 rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ x: "-100%" }}
+          animate={{ x: "100%" }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+          className="w-full h-full bg-gold-primary/30"
+        />
+      </div>
+    </div>
   </div>
 );
 
@@ -1652,6 +1684,11 @@ export default function App() {
             
             oscillator.start();
             oscillator.stop(audioCtx.currentTime + 0.5);
+            setTimeout(() => {
+              if (audioCtx.state !== 'closed') {
+                audioCtx.close().catch(console.error);
+              }
+            }, 600);
           } catch (e) {
             console.error("Audio error:", e);
           }
@@ -1743,6 +1780,11 @@ export default function App() {
               
               oscillator.start();
               oscillator.stop(audioCtx.currentTime + 0.3);
+              setTimeout(() => {
+                if (audioCtx.state !== 'closed') {
+                  audioCtx.close().catch(console.error);
+                }
+              }, 400);
             } catch (e) {
               console.error("Audio error:", e);
             }
@@ -1810,7 +1852,6 @@ export default function App() {
         <AnimatePresence>
           {(stats?.prediction?.confidence || 0) > 85 && (
             <motion.div 
-              key="high-confidence-alert"
               initial={{ opacity: 0, y: -10, scale: 0.8 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
@@ -1963,83 +2004,139 @@ export default function App() {
         {/* Keep-Alive Tab Container for Dashboard (to preserve iframe state) */}
         <div className={activeTab === 'DASHBOARD' ? 'block' : 'hidden'}>
           <Suspense fallback={<TabLoading />}>
-            <DashboardTab 
-              stats={stats} 
-              history={history} 
-              isOmega={isOmega} 
-              addNumber={addNumber} 
-              removeLast={removeLast} 
-              clearHistory={clearHistory} 
-              engineWeights={engineWeights}
-              highlightedNumbers={highlightedNumbers}
-              vacuumNumbers={vacuumNumbers}
-              targetZone={targetZone}
-              contextTargets={stats?.contextTargets || []}
-              lastNumber={history[0] ?? null}
-              searchResults={searchResults}
-              isSearchingGoogle={isSearchingGoogle}
-              onGoogleSearch={handleGoogleSearch}
-              browserUrl={browserUrl}
-              onClearBrowser={() => setBrowserUrl(null)}
-              ballisticMode={ballisticMode}
-              currentDropPoint={currentDropPoint}
-              onToggleBallisticMode={() => {
-                setBallisticMode(!ballisticMode);
-                setCurrentDropPoint(null);
-              }}
-            />
+            <motion.div
+              initial={false}
+              animate={{ opacity: activeTab === 'DASHBOARD' ? 1 : 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <DashboardTab 
+                stats={stats} 
+                history={history} 
+                isOmega={isOmega} 
+                addNumber={addNumber} 
+                removeLast={removeLast} 
+                clearHistory={clearHistory} 
+                engineWeights={engineWeights}
+                highlightedNumbers={highlightedNumbers}
+                vacuumNumbers={vacuumNumbers}
+                targetZone={targetZone}
+                contextTargets={stats?.contextTargets || []}
+                lastNumber={history[0] ?? null}
+                searchResults={searchResults}
+                isSearchingGoogle={isSearchingGoogle}
+                onGoogleSearch={handleGoogleSearch}
+                browserUrl={browserUrl}
+                onClearBrowser={() => setBrowserUrl(null)}
+                ballisticMode={ballisticMode}
+                currentDropPoint={currentDropPoint}
+                onToggleBallisticMode={() => {
+                  setBallisticMode(!ballisticMode);
+                  setCurrentDropPoint(null);
+                }}
+              />
+            </motion.div>
           </Suspense>
         </div>
 
         {/* Other tabs are conditionally rendered to save resources */}
-        {activeTab === 'TERMINAIS' && (
-          <Suspense fallback={<TabLoading />}>
-            <TerminaisTab stats={stats} history={history} />
-          </Suspense>
-        )}
+        <AnimatePresence mode="wait">
+          {activeTab === 'TERMINAIS' && (
+            <motion.div
+              key="TERMINAIS"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Suspense fallback={<TabLoading />}>
+                <TerminaisTab stats={stats} history={history} />
+              </Suspense>
+            </motion.div>
+          )}
 
-        {activeTab === 'RADAR' && (
-          <Suspense fallback={<TabLoading />}>
-            <RadarTab stats={stats} customRules={customRules} history={history} setActiveTab={setActiveTab} />
-          </Suspense>
-        )}
+          {activeTab === 'RADAR' && (
+            <motion.div
+              key="RADAR"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Suspense fallback={<TabLoading />}>
+                <RadarTab stats={stats} customRules={customRules} history={history} setActiveTab={setActiveTab} />
+              </Suspense>
+            </motion.div>
+          )}
 
-        {activeTab === 'ANALISE' && (
-          <Suspense fallback={<TabLoading />}>
-            <AnaliseTab stats={stats} />
-          </Suspense>
-        )}
+          {activeTab === 'ANALISE' && (
+            <motion.div
+              key="ANALISE"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Suspense fallback={<TabLoading />}>
+                <AnaliseTab stats={stats} />
+              </Suspense>
+            </motion.div>
+          )}
 
-        {activeTab === 'SETORIAIS' && (
-          <Suspense fallback={<TabLoading />}>
-            <SetoriaisTab stats={stats} />
-          </Suspense>
-        )}
+          {activeTab === 'SETORIAIS' && (
+            <motion.div
+              key="SETORIAIS"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Suspense fallback={<TabLoading />}>
+                <SetoriaisTab stats={stats} />
+              </Suspense>
+            </motion.div>
+          )}
 
-        {activeTab === 'ESTATISTICAS' && (
-          <Suspense fallback={<TabLoading />}>
-            <EstatisticasTab 
-              stats={stats} 
-              history={history} 
-              removeLast={removeLast} 
-              clearHistory={clearHistory} 
-              isAddingRule={isAddingRule} 
-              setIsAddingRule={setIsAddingRule} 
-              newRule={newRule} 
-              setNewRule={setNewRule} 
-              addCustomRule={addCustomRule} 
-              customRules={customRules} 
-              removeCustomRule={removeCustomRule} 
-              engineWeights={engineWeights}
-            />
-          </Suspense>
-        )}
+          {activeTab === 'ESTATISTICAS' && (
+            <motion.div
+              key="ESTATISTICAS"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Suspense fallback={<TabLoading />}>
+                <EstatisticasTab 
+                  stats={stats} 
+                  history={history} 
+                  removeLast={removeLast} 
+                  clearHistory={clearHistory} 
+                  isAddingRule={isAddingRule} 
+                  setIsAddingRule={setIsAddingRule} 
+                  newRule={newRule} 
+                  setNewRule={setNewRule} 
+                  addCustomRule={addCustomRule} 
+                  customRules={customRules} 
+                  removeCustomRule={removeCustomRule} 
+                  engineWeights={engineWeights}
+                />
+              </Suspense>
+            </motion.div>
+          )}
 
-        {activeTab === 'HISTORICO' && (
-          <Suspense fallback={<TabLoading />}>
-            <HistoricoTab history={history} setHistory={setHistory} />
-          </Suspense>
-        )}
+          {activeTab === 'HISTORICO' && (
+            <motion.div
+              key="HISTORICO"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Suspense fallback={<TabLoading />}>
+                <HistoricoTab history={history} setHistory={setHistory} />
+              </Suspense>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
     {/* Footer */}
