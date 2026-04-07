@@ -261,6 +261,32 @@ export default function App() {
     });
     const maxSectorCount = Math.max(...Object.values(sectorCounts));
 
+    // Evaluate Neural Engine and Markov if history is long enough
+    let neuralHit = false;
+    let markovHit = false;
+
+    if (history.length >= 20) {
+      const lastNum = history[0];
+      const prevHistory = history.slice(1, 101); // Limit to last 100 for evaluation
+
+      // Evaluate Neural Engine
+      const neuralProbs = neuralEngine.predict(prevHistory);
+      neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
+
+      // Evaluate Markov
+      const prevLastNum = prevHistory[0];
+      const transitions: Record<number, number> = {};
+      const transitionHistory = prevHistory.slice(0, 50);
+      for (let i = 0; i < transitionHistory.length - 1; i++) {
+        if (transitionHistory[i+1] === prevLastNum) {
+          const next = transitionHistory[i];
+          transitions[next] = (transitions[next] || 0) + 1;
+        }
+      }
+      const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
+      if (topMarkov && Number(topMarkov[0]) === lastNum) markovHit = true;
+    }
+
     // Adjust weights based on table behavior
     setEngineWeights(prev => {
       const newWeights = { ...prev };
@@ -293,9 +319,16 @@ export default function App() {
         newWeights.neural = Math.min(newWeights.neural + 0.1, 1.8);
       }
 
+      // 5. Apply dynamic hits/misses adjustments if applicable
+      if (history.length >= 20) {
+        newWeights.neural = Math.max(0.5, Math.min(2.0, newWeights.neural + (neuralHit ? 0.1 : -0.02)));
+        newWeights.markov = Math.max(0.5, Math.min(2.0, newWeights.markov + (markovHit ? 0.1 : -0.02)));
+      }
+
       return newWeights;
     });
   }, [history]);
+
   const [isMuted, setIsMuted] = useState(false);
   const [searchResults, setSearchResults] = useState<string | null>(null);
   const [isSearchingGoogle, setIsSearchingGoogle] = useState(false);
@@ -358,45 +391,10 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [history, user]);
 
-  // Dynamic Weight Balancing Logic (Optimized)
-  useEffect(() => {
-    if (history.length < 20) return;
-
-    const lastNum = history[0];
-    const prevHistory = history.slice(1, 101); // Limit to last 100 for evaluation
-
-    // Evaluate Neural Engine
-    const neuralProbs = neuralEngine.predict(prevHistory);
-    const neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
-
-    // Evaluate Markov
-    let markovHit = false;
-    const prevLastNum = prevHistory[0];
-    const transitions: Record<number, number> = {};
-    // Only look at the last 50 transitions for speed
-    const transitionHistory = prevHistory.slice(0, 50);
-    for (let i = 0; i < transitionHistory.length - 1; i++) {
-      if (transitionHistory[i+1] === prevLastNum) {
-        const next = transitionHistory[i];
-        transitions[next] = (transitions[next] || 0) + 1;
-      }
-    }
-    const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
-    if (topMarkov && Number(topMarkov[0]) === lastNum) markovHit = true;
-
-    setEngineWeights(prev => ({
-      neural: Math.max(0.5, Math.min(2.0, prev.neural + (neuralHit ? 0.1 : -0.02))),
-      markov: Math.max(0.5, Math.min(2.0, prev.markov + (markovHit ? 0.1 : -0.02))),
-      bias: prev.bias,
-      sector: prev.sector,
-      shortTerm: prev.shortTerm
-    }));
-  }, [history]);
-
   // Train neural engine when history changes
   useEffect(() => {
     if (history.length >= 20) {
-      neuralEngine.train(history);
+      neuralEngine.train(history).catch(err => console.error("Unhandled train error:", err));
     }
   }, [history]);
 
@@ -1893,7 +1891,7 @@ export default function App() {
                 <div className="hidden md:block text-right">
                   <p className="text-[10px] font-black text-white uppercase tracking-tighter">{user.displayName || 'Usuário'}</p>
                   <button 
-                    onClick={() => logout()} 
+                    onClick={() => logout().catch(err => console.error('Logout error:', err))} 
                     className="text-[8px] font-black text-zinc-500 hover:text-red-500 uppercase tracking-[0.2em] transition-colors"
                   >
                     Sair da Conta
@@ -1911,7 +1909,7 @@ export default function App() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => loginWithGoogle()}
+                onClick={() => loginWithGoogle().catch(err => console.error('Login error:', err))}
                 className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
               >
                 <Eye className="w-4 h-4 text-gold-primary" />

@@ -116,15 +116,13 @@ export class NeuralEngine {
     if (!this.model || history.length < 10) return new Array(37).fill(0);
 
     try {
-      const input = history.slice(0, 10).reverse().map(n => this.getFeatures(n));
-      const inputTensor = tf.tensor3d([input]);
-      const prediction = this.model.predict(inputTensor) as tf.Tensor;
-      const scores = prediction.dataSync() as Float32Array;
-      
-      inputTensor.dispose();
-      prediction.dispose();
-
-      return Array.from(scores);
+      return tf.tidy(() => {
+        const input = history.slice(0, 10).reverse().map(n => this.getFeatures(n));
+        const inputTensor = tf.tensor3d([input]);
+        const prediction = this.model!.predict(inputTensor) as tf.Tensor;
+        const scores = prediction.dataSync() as Float32Array;
+        return Array.from(scores);
+      });
     } catch (error) {
       console.error("Neural prediction error:", error);
       return new Array(37).fill(0);

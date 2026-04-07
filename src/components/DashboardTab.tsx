@@ -5,7 +5,6 @@ import Markdown from 'react-markdown';
 import { Stats, RouletteNumber } from '../types';
 import { COLORS, ROULETTE_NUMBERS, MIRROR_NUMBERS_LIST, ESPELHOS_CFG } from '../constants';
 import RouletteWheelVisual from './RouletteWheelVisual';
-import OCRScanner from './OCRScanner';
 
 interface DashboardTabProps {
   stats: Stats | null;
@@ -58,7 +57,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   const [isIframeLoading, setIsIframeLoading] = React.useState(false);
   const [iframeKey, setIframeKey] = React.useState(0);
   const [isMaximized, setIsMaximized] = React.useState(false);
-  const [showOCR, setShowOCR] = React.useState(false);
 
   // Get last 10 numbers for preview
   const recentNumbers = history.slice(0, 10);
@@ -414,14 +412,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowOCR(true)}
-                className="px-3 py-1.5 rounded-xl border bg-gold-primary/10 border-gold-primary/30 text-gold-primary hover:bg-gold-primary/20 transition-all flex items-center gap-2"
-                title="Análise de Histórico"
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-                <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Histórico</span>
-              </button>
-              <button
                 onClick={onToggleBallisticMode}
                 className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-2 ${
                   ballisticMode 
@@ -770,19 +760,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
           </div>
         </section>
       </div>
-
-      {/* OCR Scanner Modal */}
-      <AnimatePresence>
-        {showOCR && (
-          <OCRScanner 
-            onNumberDetected={(num) => {
-              addNumber(num);
-              // We don't close automatically so the user can scan multiple numbers
-            }}
-            onClose={() => setShowOCR(false)}
-          />
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 });
