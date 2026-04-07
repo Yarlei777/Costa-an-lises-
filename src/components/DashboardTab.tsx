@@ -502,46 +502,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             />
           </div>
 
-          {/* Legenda do Cilindro */}
-          <div className="px-8 pb-8 pt-4 border-t border-white/5 bg-black/20">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)] animate-pulse" />
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-red-500">Bolha Vermelha</span>
-                  <span className="text-[8px] text-zinc-400 font-black leading-tight">ALVO PRINCIPAL (CONVERGÊNCIA MÁXIMA)</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-300">Verde</span>
-                  <span className="text-[8px] text-zinc-500 font-bold leading-tight">Alvos da análise do cérebro neural</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.6)]" />
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-300">Rosa</span>
-                  <span className="text-[8px] text-zinc-500 font-bold leading-tight">Alvos da análise de espelhos</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-gold-primary shadow-[0_0_8px_rgba(212,175,55,0.6)]" />
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-300">Dourado</span>
-                  <span className="text-[8px] text-zinc-500 font-bold leading-tight">Números de contexto e apoio</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-300">Azul</span>
-                  <span className="text-[8px] text-zinc-500 font-bold leading-tight">Números de vácuo e recorrência</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Legenda do Cilindro Removida */}
         </section>
 
         {/* Bias Monitor */}
