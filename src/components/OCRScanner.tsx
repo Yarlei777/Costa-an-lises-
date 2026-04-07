@@ -18,14 +18,43 @@ const OCRScanner: React.FC<OCRScannerProps> = ({ onNumberDetected, onClose }) =>
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [lastImage, setLastImage] = useState<HTMLImageElement | null>(null);
 
-  const processImage = async (imageSource: HTMLImageElement, base64Data: string) => {
+  const processImage = async (imageSource: HTMLImageElement) => {
     setIsScanning(true);
     setDetectedSequence([]);
     setLastImage(imageSource);
     
     try {
+      // Resize image for OCR to avoid Vercel payload limits (4.5MB)
+      // and improve processing speed.
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not get canvas context');
+
+      const MAX_WIDTH = 1200;
+      const MAX_HEIGHT = 1200;
+      let width = imageSource.width;
+      let height = imageSource.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(imageSource, 0, 0, width, height);
+      
+      const resizedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
       console.log('Iniciando OCR com Gemini Vision...');
-      const numbers = await extractNumbersFromImage(base64Data);
+      const numbers = await extractNumbersFromImage(resizedBase64);
       
       if (numbers && numbers.length > 0) {
         setDetectedSequence(numbers);
@@ -36,16 +65,9 @@ const OCRScanner: React.FC<OCRScannerProps> = ({ onNumberDetected, onClose }) =>
       
       console.log('Gemini não retornou números, tentando Tesseract...');
       
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) {
-        setIsScanning(false);
-        return;
-      }
-
-      tempCanvas.width = imageSource.width;
-      tempCanvas.height = imageSource.height;
-      tempCtx.drawImage(imageSource, 0, 0);
+      // Use the resized canvas for Tesseract as well
+      const tempCanvas = canvas;
+      const tempCtx = ctx;
 
       // Simple grayscale preprocessing for better OCR
       const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
@@ -80,7 +102,7 @@ const OCRScanner: React.FC<OCRScannerProps> = ({ onNumberDetected, onClose }) =>
       processWords(words);
     } catch (err) {
       console.error('OCR Error:', err);
-      toast.error('Erro ao processar imagem. Verifique a qualidade do print.');
+      toast.error('Erro ao processar imagem. Verifique a conexão e a qualidade do print.');
     } finally {
       setIsScanning(false);
     }
@@ -134,7 +156,7 @@ const OCRScanner: React.FC<OCRScannerProps> = ({ onNumberDetected, onClose }) =>
       const base64 = event.target?.result as string;
       const img = new Image();
       img.onload = () => {
-        processImage(img, base64);
+        processImage(img);
       };
       img.src = base64;
     };
