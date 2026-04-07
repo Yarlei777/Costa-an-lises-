@@ -400,23 +400,26 @@ export default function App() {
     }
   }, [history]);
 
-  const addNumber = React.useCallback((num: number) => {
+  const addNumber = React.useCallback((num: number | number[]) => {
     // Simulate haptic feedback
     if (window.navigator.vibrate) {
       window.navigator.vibrate(20);
     }
     
+    if (Array.isArray(num)) {
+      if (num.length === 0) return;
+      setLastNumber(num[0]);
+      setHistory(prev => [...num, ...prev].slice(0, 500));
+      toast.success(`${num.length} números adicionados ao histórico.`);
+      return;
+    }
+
     if (ballisticMode) {
       if (currentDropPoint === null) {
         setCurrentDropPoint(num);
         toast.success(`Ponto de soltura: ${num}. Agora selecione onde caiu.`);
         return;
       } else {
-        // We have both drop point and landed number
-        // In a real app, we'd store this in a more complex history object.
-        // For now, we'll just store the landed number in the main history,
-        // but we could extend the history state to hold objects if needed.
-        // Let's keep it simple for this iteration and just log it or use it for immediate prediction.
         const drop = currentDropPoint;
         const landed = num;
         
