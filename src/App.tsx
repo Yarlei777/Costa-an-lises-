@@ -176,7 +176,7 @@ const LegalModal = lazyRetry(() => import("./components/LegalModals"));
 
 // Loading fallback component
 const TabLoading = () => (
-  <div className="flex flex-col items-center justify-center py-40 space-y-6">
+  <div className="flex flex-col items-center justify-center py-40 space-y-6" translate="no">
     <div className="relative">
       <div className="w-16 h-16 rounded-full border-2 border-gold-primary/10 border-t-gold-primary animate-spin" />
       <div className="absolute inset-0 w-16 h-16 rounded-full border-2 border-gold-primary/5 border-b-gold-primary/40 animate-spin-slow" />
@@ -1810,7 +1810,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-gold-primary/30 relative overflow-hidden">
+    <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-gold-primary/30 relative overflow-hidden" translate="no">
       {/* Toaster for notifications */}
       <Toaster 
         position="top-center" 

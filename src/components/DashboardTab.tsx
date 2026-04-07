@@ -161,6 +161,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4 }}
       className="grid grid-cols-1 lg:grid-cols-12 gap-10"
+      translate="no"
     >
       {isMaximized && (
         <div 

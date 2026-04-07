@@ -6,8 +6,12 @@ import './index.css';
 
 // Global error listener for catching errors before React mounts
 window.addEventListener('error', (event) => {
+  if (event.message && (event.message.includes('removeChild') || event.message.includes('appendChild'))) {
+    console.warn('DOM mismatch detected (likely Google Translate). Reloading...');
+    window.location.reload();
+    return;
+  }
   console.error('Global error caught:', event.error);
-  // We can't use alert() in iframe, but we can log it
 });
 
 window.addEventListener('unhandledrejection', (event) => {
