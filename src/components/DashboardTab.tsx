@@ -396,6 +396,103 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
           </div>
         </section>
 
+        {/* Roulette Wheel Visual */}
+        <section className="glass-card rounded-[2rem] p-0 overflow-hidden">
+          <div className="flex items-center justify-between p-8 pb-0">
+            <div className="flex items-center gap-3">
+              <Zap className="w-4 h-4 text-gold-primary" />
+              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Visualização do Cilindro</h2>
+            </div>
+          </div>
+          <div className="p-0">
+            <RouletteWheelVisual 
+              highlightedNumbers={highlightedNumbers} 
+              contextNumbers={contextTargets}
+              vacuumNumbers={vacuumNumbers}
+              mainTarget={stats?.prediction?.mainTarget}
+              targetZone={targetZone} 
+              isOmega={isOmega}
+              lastNumber={lastNumber}
+            />
+          </div>
+
+          {/* Legenda do Cilindro Removida */}
+        </section>
+
+        {/* Bias Monitor */}
+        <section className="glass-card rounded-[2rem] p-8">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <Activity className="w-4 h-4 text-gold-primary" />
+              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Monitor de Viés</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-gold-primary animate-pulse" />
+              <span className="text-[8px] font-black uppercase tracking-widest text-gold-primary">Prioridade {'>'} 85%</span>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {stats?.biases && stats?.biases?.length > 0 ? (
+              [...(stats?.biases || [])]
+                .sort((a, b) => b.confidence - a.confidence)
+                .slice(0, 4)
+                .map((bias, i) => (
+                  <div 
+                    key={i} 
+                    className={`p-4 rounded-2xl border transition-all relative overflow-hidden group ${bias.confidence > 85 ? 'bg-gold-primary/10 border-gold-primary/40 shadow-[0_0_20px_rgba(212,175,55,0.1)]' : 'bg-white/5 border-white/5'}`}
+                  >
+                    {bias.confidence > 85 && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gold-primary/10 to-transparent skew-x-12 animate-shimmer" />
+                    )}
+                    <div className="flex items-start justify-between relative z-10 gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className={`w-1.5 h-1.5 rounded-full ${bias.confidence > 85 ? 'bg-gold-primary animate-pulse' : 'bg-zinc-600'}`} />
+                          <p className="text-[8px] uppercase tracking-widest text-zinc-500 font-black">{bias.type}</p>
+                          {bias.confidence > 85 && (
+                            <span className="px-1.5 py-0.5 rounded-full bg-gold-primary text-[6px] font-black text-black uppercase tracking-tighter shadow-[0_0_10px_rgba(212,175,55,0.3)]">Prioritário</span>
+                          )}
+                        </div>
+                        <p className={`text-sm font-black mb-0.5 ${bias.confidence > 85 ? 'text-white' : 'text-zinc-300'}`}>{bias.value}</p>
+                        <p className="text-[9px] text-zinc-500 font-bold leading-tight opacity-80 group-hover:opacity-100 transition-opacity">
+                          {bias.type === 'Padrão de Vácuo' && "O número está repetindo um intervalo de ausência histórico exato."}
+                          {bias.type === 'Vácuo Recorrente' && "O terminal ou família atingiu um limite de atraso recorrente."}
+                          {bias.type === 'Espelho Direto' && "Convergência baseada em números que costumam sair juntos (espelhos)."}
+                          {bias.type === 'Setor' && "Forte tendência de queda em uma região específica do cilindro."}
+                          {bias.type === 'Terminal' && "Alta frequência detectada para este final de número."}
+                          {bias.type === 'Sequência' && "Padrão de repetição detectado em cores, paridade ou altura."}
+                          {bias.type === 'Hiper-Quente' && "Número com frequência estatística fora da curva normal."}
+                          {bias.type === 'Assinatura' && "Padrão de força e velocidade constante detectado no crupiê."}
+                          {bias.type === 'Padrão Visual' && "Sequência visual detectada na mesa ou no cilindro."}
+                          {bias.type === 'Desvio Padrão' && "Anomalia estatística: o número/terminal está muito abaixo da média esperada."}
+                          {bias.type === 'Lei do Terceiro' && "Análise matemática de repetição e dormência em ciclos de 37 giros."}
+                          {bias.type === 'Pêndulo' && "A bola está saltando de um lado para o outro do cilindro em ressonância."}
+                          {bias.type === 'Geometria' && "Padrão detectado no tapete de apostas (Dúzias ou Colunas)."}
+                          {bias.type === 'Fibonacci' && "A distância entre as quedas segue a sequência matemática de Fibonacci."}
+                          {bias.type === 'Alternância' && "Mesa em padrão Streaky (repetindo) ou Choppy (alternando)."}
+                        </p>
+                      </div>
+                      <div className="text-right flex flex-col items-end justify-center h-full">
+                        <p className={`text-[8px] uppercase tracking-widest font-black mb-1 ${bias.confidence > 85 ? 'text-gold-primary' : 'text-zinc-600'}`}>Poder</p>
+                        <div className="flex items-baseline gap-0.5">
+                          <span className={`text-lg font-black ${bias.confidence > 85 ? 'gold-text' : 'text-zinc-400'}`}>{bias.confidence}</span>
+                          <span className={`text-[8px] font-black ${bias.confidence > 85 ? 'text-gold-primary' : 'text-zinc-600'}`}>%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+            ) : (
+                <div className="py-10 text-center border border-dashed border-white/10 rounded-2xl">
+                  <p className="text-xs text-zinc-600 font-bold uppercase tracking-widest">Aguardando Dados...</p>
+                </div>
+              )}
+            </div>
+          </section>
+      </div>
+
+      {/* Right Column: Google Search & Browser */}
+      <div className="lg:col-span-6 lg:sticky lg:top-8 self-start space-y-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 800px' }}>
         {/* Manual Input Terminal */}
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center justify-between mb-6">
@@ -482,98 +579,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
           </div>
         </section>
 
-        {/* Roulette Wheel Visual */}
-        <section className="glass-card rounded-[2rem] p-0 overflow-hidden">
-          <div className="flex items-center justify-between p-8 pb-0">
-            <div className="flex items-center gap-3">
-              <Zap className="w-4 h-4 text-gold-primary" />
-              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Visualização do Cilindro</h2>
-            </div>
-          </div>
-          <div className="p-0">
-            <RouletteWheelVisual 
-              highlightedNumbers={highlightedNumbers} 
-              contextNumbers={contextTargets}
-              vacuumNumbers={vacuumNumbers}
-              mainTarget={stats?.prediction?.mainTarget}
-              targetZone={targetZone} 
-              isOmega={isOmega}
-              lastNumber={lastNumber}
-            />
-          </div>
-
-          {/* Legenda do Cilindro Removida */}
-        </section>
-
-        {/* Bias Monitor */}
-        <section className="glass-card rounded-[2rem] p-8">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <Activity className="w-4 h-4 text-gold-primary" />
-              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Monitor de Viés</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-gold-primary animate-pulse" />
-              <span className="text-[8px] font-black uppercase tracking-widest text-gold-primary">Prioridade {'>'} 85%</span>
-            </div>
-          </div>
-          <div className="space-y-4">
-            {stats?.biases && stats?.biases?.length > 0 ? (
-              [...(stats?.biases || [])]
-                .sort((a, b) => b.confidence - a.confidence)
-                .slice(0, 4)
-                .map((bias, i) => (
-                  <div 
-                    key={i} 
-                    className={`p-4 rounded-2xl border transition-all relative overflow-hidden group ${bias.confidence > 85 ? 'bg-gold-primary/10 border-gold-primary/40 shadow-[0_0_20px_rgba(212,175,55,0.1)]' : 'bg-white/5 border-white/5'}`}
-                  >
-                    {bias.confidence > 85 && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gold-primary/10 to-transparent skew-x-12 animate-shimmer" />
-                    )}
-                    <div className="flex items-start justify-between relative z-10 gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={`w-1.5 h-1.5 rounded-full ${bias.confidence > 85 ? 'bg-gold-primary animate-pulse' : 'bg-zinc-600'}`} />
-                          <p className="text-[8px] uppercase tracking-widest text-zinc-500 font-black">{bias.type}</p>
-                          {bias.confidence > 85 && (
-                            <span className="px-1.5 py-0.5 rounded-full bg-gold-primary text-[6px] font-black text-black uppercase tracking-tighter shadow-[0_0_10px_rgba(212,175,55,0.3)]">Prioritário</span>
-                          )}
-                        </div>
-                        <p className={`text-sm font-black mb-0.5 ${bias.confidence > 85 ? 'text-white' : 'text-zinc-300'}`}>{bias.value}</p>
-                        <p className="text-[9px] text-zinc-500 font-bold leading-tight opacity-80 group-hover:opacity-100 transition-opacity">
-                          {bias.type === 'Padrão de Vácuo' && "O número está repetindo um intervalo de ausência histórico exato."}
-                          {bias.type === 'Vácuo Recorrente' && "O terminal ou família atingiu um limite de atraso recorrente."}
-                          {bias.type === 'Espelho Direto' && "Convergência baseada em números que costumam sair juntos (espelhos)."}
-                          {bias.type === 'Setor' && "Forte tendência de queda em uma região específica do cilindro."}
-                          {bias.type === 'Terminal' && "Alta frequência detectada para este final de número."}
-                          {bias.type === 'Sequência' && "Padrão de repetição detectado em cores, paridade ou altura."}
-                          {bias.type === 'Hiper-Quente' && "Número com frequência estatística fora da curva normal."}
-                          {bias.type === 'Assinatura' && "Padrão de força e velocidade constante detectado no crupiê."}
-                          {bias.type === 'Padrão Visual' && "Sequência visual detectada na mesa ou no cilindro."}
-                          {bias.type === 'Desvio Padrão' && "Anomalia estatística: o número/terminal está muito abaixo da média esperada."}
-                        </p>
-                      </div>
-                      <div className="text-right flex flex-col items-end justify-center h-full">
-                        <p className={`text-[8px] uppercase tracking-widest font-black mb-1 ${bias.confidence > 85 ? 'text-gold-primary' : 'text-zinc-600'}`}>Poder</p>
-                        <div className="flex items-baseline gap-0.5">
-                          <span className={`text-lg font-black ${bias.confidence > 85 ? 'gold-text' : 'text-zinc-400'}`}>{bias.confidence}</span>
-                          <span className={`text-[8px] font-black ${bias.confidence > 85 ? 'text-gold-primary' : 'text-zinc-600'}`}>%</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-            ) : (
-                <div className="py-10 text-center border border-dashed border-white/10 rounded-2xl">
-                  <p className="text-xs text-zinc-600 font-bold uppercase tracking-widest">Aguardando Dados...</p>
-                </div>
-              )}
-            </div>
-          </section>
-      </div>
-
-      {/* Right Column: Google Search & Browser */}
-      <div className="lg:col-span-6 lg:sticky lg:top-8 self-start space-y-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 800px' }}>
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-lg">

@@ -1,5 +1,8 @@
 import * as tf from '@tensorflow/tfjs';
 
+// Ensure TF backend is ready and catch any initialization errors
+tf.ready().catch(err => console.error("TensorFlow initialization error:", err));
+
 export class NeuralEngine {
   private model: tf.LayersModel | null = null;
   private isTraining: boolean = false;

@@ -335,7 +335,7 @@ export default function App() {
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
   const [lastNumber, setLastNumber] = useState<number | null>(null);
 
-  const handleGoogleSearch = React.useCallback(async (query: string) => {
+  const handleGoogleSearch = React.useCallback((query: string) => {
     if (!query) {
       setBrowserUrl(null);
       setSearchResults(null);
@@ -362,18 +362,22 @@ export default function App() {
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        try {
-          const session = await getUserSession(currentUser.uid);
-          if (session && session.history) {
-            setHistory(session.history);
+      try {
+        setUser(currentUser);
+        if (currentUser) {
+          try {
+            const session = await getUserSession(currentUser.uid);
+            if (session && session.history) {
+              setHistory(session.history);
+            }
+          } catch (err) {
+            console.error("Error fetching session:", err);
           }
-        } catch (err) {
-          console.error("Error fetching session:", err);
         }
+        setLoading(false);
+      } catch (err) {
+        console.error("Error in auth state change:", err);
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -1424,6 +1428,229 @@ export default function App() {
       });
     }
 
+    // --- CAMADA 20: LEI DO TERCEIRO (LAW OF THE THIRDS) ---
+    if (history.length >= 37) {
+      const last37 = history.slice(0, 37);
+      const thirdsCounts: Record<number, number> = {};
+      last37.forEach(num => {
+        thirdsCounts[num] = (thirdsCounts[num] || 0) + 1;
+      });
+
+      const sleeping: number[] = [];
+      const once: number[] = [];
+      const multiple: number[] = [];
+
+      for (let i = 0; i <= 36; i++) {
+        const count = thirdsCounts[i] || 0;
+        if (count === 0) sleeping.push(i);
+        else if (count === 1) once.push(i);
+        else multiple.push(i);
+      }
+
+      // Se a cota de "repetidos" (multiple) estiver abaixo da média teórica (~12), 
+      // os números que saíram 1 vez (once) têm altíssima probabilidade de repetir para cumprir a cota.
+      if (multiple.length < 12) {
+        once.forEach(num => {
+          numberScores[num] += 80 * engineWeights.bias;
+        });
+        detectedBiases.push({
+          type: 'Lei do Terceiro',
+          value: `Cota de repetição baixa (${multiple.length}/12). Números únicos em alta.`,
+          confidence: 88
+        });
+      }
+      
+      // Se a cota de "dorminhocos" (sleeping) estiver muito acima de 13, 
+      // significa que a mesa está repetindo muito os mesmos números.
+      if (sleeping.length > 14) {
+         multiple.forEach(num => {
+           numberScores[num] += 60 * engineWeights.bias;
+         });
+         detectedBiases.push({
+          type: 'Lei do Terceiro',
+          value: `Mesa concentrada (${sleeping.length} dormindo). Favorecendo repetidores.`,
+          confidence: 85
+        });
+      }
+    }
+
+    // --- CAMADA 21: PADRÃO DE PÊNDULO (PENDULUM STRIKE) ---
+    if (history.length >= 3) {
+      const getDistance = (n1: number, n2: number) => {
+        const idx1 = WHEEL_ORDER.indexOf(n1);
+        const idx2 = WHEEL_ORDER.indexOf(n2);
+        const rawDist = Math.abs(idx1 - idx2);
+        return Math.min(rawDist, 37 - rawDist);
+      };
+
+      const dist1 = getDistance(history[0], history[1]);
+      const dist2 = getDistance(history[1], history[2]);
+
+      // Verifica se a bola está pulando de um lado para o outro (distância entre 15 e 21 casas)
+      if (dist1 >= 15 && dist1 <= 21 && dist2 >= 15 && dist2 <= 21) {
+        const lastIdx = WHEEL_ORDER.indexOf(history[0]);
+        
+        // O próximo alvo deve ser do outro lado do cilindro em relação ao history[0]
+        const targetIdx1 = (lastIdx + 18) % 37;
+        const targetIdx2 = (lastIdx - 18 + 37) % 37;
+
+        const pendulumTargets = [
+          WHEEL_ORDER[targetIdx1],
+          WHEEL_ORDER[(targetIdx1 + 1) % 37],
+          WHEEL_ORDER[(targetIdx1 - 1 + 37) % 37],
+          WHEEL_ORDER[targetIdx2],
+          WHEEL_ORDER[(targetIdx2 + 1) % 37],
+          WHEEL_ORDER[(targetIdx2 - 1 + 37) % 37],
+        ];
+
+        // Remove duplicates
+        const uniquePendulumTargets = Array.from(new Set(pendulumTargets));
+
+        uniquePendulumTargets.forEach(num => {
+          numberScores[num] += 90 * engineWeights.bias;
+        });
+
+        detectedBiases.push({
+          type: 'Pêndulo',
+          value: `Ressonância detectada (saltos de ${dist1} e ${dist2} casas). Alvo no lado oposto.`,
+          confidence: 86
+        });
+      }
+    }
+
+    // --- CAMADA 22: GEOMETRIA DE MESA (DÚZIAS E COLUNAS) ---
+    if (history.length >= 5) {
+      const getDozen = (n: number) => n === 0 ? 0 : n <= 12 ? 1 : n <= 24 ? 2 : 3;
+      const getColumn = (n: number) => n === 0 ? 0 : n % 3 === 1 ? 1 : n % 3 === 2 ? 2 : 3;
+
+      const recentDozens = history.slice(0, 5).map(getDozen);
+      const recentColumns = history.slice(0, 5).map(getColumn);
+
+      // Análise de Momentum de Dúzia (ex: 3 vezes seguidas na mesma dúzia)
+      if (recentDozens[0] !== 0 && recentDozens[0] === recentDozens[1] && recentDozens[1] === recentDozens[2]) {
+        const hotDozen = recentDozens[0];
+        for (let i = 1; i <= 36; i++) {
+          if (getDozen(i) === hotDozen) {
+            numberScores[i] += 40 * engineWeights.shortTerm;
+          }
+        }
+        detectedBiases.push({
+          type: 'Geometria',
+          value: `Momentum forte na ${hotDozen}ª Dúzia.`,
+          confidence: 78
+        });
+      }
+
+      // Análise de Momentum de Coluna
+      if (recentColumns[0] !== 0 && recentColumns[0] === recentColumns[1] && recentColumns[1] === recentColumns[2]) {
+        const hotColumn = recentColumns[0];
+        for (let i = 1; i <= 36; i++) {
+          if (getColumn(i) === hotColumn) {
+            numberScores[i] += 40 * engineWeights.shortTerm;
+          }
+        }
+        detectedBiases.push({
+          type: 'Geometria',
+          value: `Momentum forte na ${hotColumn}ª Coluna.`,
+          confidence: 78
+        });
+      }
+
+      // Padrão de Zigue-Zague em Colunas (ex: Col 1 -> Col 3 -> Col 1)
+      if (recentColumns[0] !== 0 && recentColumns[1] !== 0 && recentColumns[2] !== 0) {
+        if (recentColumns[0] === recentColumns[2] && recentColumns[0] !== recentColumns[1]) {
+          // Prevê que vai continuar o zigue-zague, voltando para a coluna 1 (que é a recentColumns[1])
+          const targetColumn = recentColumns[1];
+          for (let i = 1; i <= 36; i++) {
+            if (getColumn(i) === targetColumn) {
+              numberScores[i] += 50 * engineWeights.shortTerm;
+            }
+          }
+          detectedBiases.push({
+            type: 'Geometria',
+            value: `Zigue-Zague detectado. Alvo: ${targetColumn}ª Coluna.`,
+            confidence: 82
+          });
+        }
+      }
+    }
+
+    // --- CAMADA 23: RESSONÂNCIA DE FIBONACCI ---
+    if (history.length >= 3) {
+      const FIBONACCI_DISTANCES = [1, 2, 3, 5, 8, 13];
+      const getDistance = (n1: number, n2: number) => {
+        const idx1 = WHEEL_ORDER.indexOf(n1);
+        const idx2 = WHEEL_ORDER.indexOf(n2);
+        const rawDist = Math.abs(idx1 - idx2);
+        return Math.min(rawDist, 37 - rawDist);
+      };
+
+      const dist1 = getDistance(history[0], history[1]);
+      const dist2 = getDistance(history[1], history[2]);
+
+      if (FIBONACCI_DISTANCES.includes(dist1) && FIBONACCI_DISTANCES.includes(dist2)) {
+        const lastIdx = WHEEL_ORDER.indexOf(history[0]);
+        const fibTargets: number[] = [];
+        
+        FIBONACCI_DISTANCES.forEach(dist => {
+          fibTargets.push(WHEEL_ORDER[(lastIdx + dist) % 37]);
+          fibTargets.push(WHEEL_ORDER[(lastIdx - dist + 37) % 37]);
+        });
+
+        const uniqueFibTargets = Array.from(new Set(fibTargets));
+        uniqueFibTargets.forEach(num => {
+          numberScores[num] += 60 * engineWeights.bias;
+        });
+
+        detectedBiases.push({
+          type: 'Fibonacci',
+          value: `Ressonância algorítmica detectada (Saltos: ${dist1}, ${dist2}).`,
+          confidence: 84
+        });
+      }
+    }
+
+    // --- CAMADA 24: DETECTOR DE ALTERNÂNCIA (CHOPPY VS STREAKY) ---
+    if (history.length >= 4) {
+      const getColor = (n: number) => n === 0 ? 'green' : ROULETTE_NUMBERS[n].color;
+      const recentColors = history.slice(0, 4).map(getColor);
+      
+      // Streaky Color (4 same colors)
+      if (recentColors[0] !== 'green' && recentColors.every(c => c === recentColors[0])) {
+        const streakColor = recentColors[0];
+        for (let i = 1; i <= 36; i++) {
+          if (getColor(i) === streakColor) {
+            numberScores[i] += 40 * engineWeights.shortTerm;
+          }
+        }
+        detectedBiases.push({
+          type: 'Alternância',
+          value: `Mesa Streaky: Tendência forte para a cor ${streakColor === 'red' ? 'Vermelha' : 'Preta'}.`,
+          confidence: 80
+        });
+      }
+      
+      // Choppy Color (Alternating: R-B-R-B or B-R-B-R)
+      if (
+        recentColors[0] !== 'green' && recentColors[1] !== 'green' && recentColors[2] !== 'green' && recentColors[3] !== 'green' &&
+        recentColors[0] !== recentColors[1] &&
+        recentColors[1] !== recentColors[2] &&
+        recentColors[2] !== recentColors[3]
+      ) {
+        const expectedColor = recentColors[1]; // Se 0 é R, 1 é B, 2 é R, 3 é B. O próximo deve ser B (igual ao 1)
+        for (let i = 1; i <= 36; i++) {
+          if (getColor(i) === expectedColor) {
+            numberScores[i] += 50 * engineWeights.shortTerm;
+          }
+        }
+        detectedBiases.push({
+          type: 'Alternância',
+          value: `Mesa Choppy: Padrão alternado. Alvo: cor ${expectedColor === 'red' ? 'Vermelha' : 'Preta'}.`,
+          confidence: 82
+        });
+      }
+    }
+
     const sortedNumbers = numberScores
       .map((score, num) => ({ num, score }))
       .sort((a, b) => b.score - a.score);
@@ -1431,7 +1658,7 @@ export default function App() {
     const top8 = (sortedNumbers || []).slice(0, 8);
     
     // Normalize scores to percentages for UI
-    const maxPossibleScore = 750; // Updated max for new layers
+    const maxPossibleScore = 1120; // Updated max for new layers
     const targetsWithConfidence = top8.map(t => ({
       num: t.num,
       confidence: Math.min(Math.round((t.score / maxPossibleScore) * 100 * (1.2 - chaosIndex)), 99)
