@@ -236,7 +236,7 @@ const TerminaisTab: React.FC<TerminaisTabProps> = React.memo(({ stats, history }
             <div className="space-y-6">
               <p className="text-sm font-bold text-zinc-400 leading-relaxed">
                 A análise de terminais foca na repetição de padrões de final de número. 
-                Quando um grupo como <span className="text-gold-primary">1.4.7</span> atinge alta confiança, 
+                Quando um grupo como <span className="text-gold-primary">0.1.4.7</span> atinge alta confiança, 
                 recomenda-se cobrir todos os números que terminam com esses dígitos.
               </p>
               <div className="p-6 rounded-2xl bg-emerald-500/5 border border-emerald-500/20">
@@ -260,7 +260,7 @@ const TerminaisTab: React.FC<TerminaisTabProps> = React.memo(({ stats, history }
               {(history || []).slice(0, 8).map((num, i) => {
                 const terminal = num % 10;
                 let group = "Outro";
-                if ([1, 4, 7].includes(terminal)) group = "1.4.7";
+                if ([0, 1, 4, 7].includes(terminal)) group = "0.1.4.7";
                 else if ([2, 5, 8].includes(terminal)) group = "2.5.8";
                 else if ([3, 6, 9].includes(terminal)) group = "3.6.9";
                 

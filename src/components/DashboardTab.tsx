@@ -213,7 +213,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       </div>
 
       {/* Left: Main Prediction & Manual Input */}
-      <div className="lg:col-span-6 space-y-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 1200px' }}>
+      <div className="lg:col-span-6 space-y-6">
         <section className="relative flex flex-col items-center py-4">
           <div className="absolute -inset-20 bg-gold-primary/5 blur-[100px] rounded-full animate-pulse" />
           <div className="relative w-full flex flex-col items-center">
@@ -465,7 +465,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                           {bias.type === 'Assinatura' && "Padrão de força e velocidade constante detectado no crupiê."}
                           {bias.type === 'Padrão Visual' && "Sequência visual detectada na mesa ou no cilindro."}
                           {bias.type === 'Desvio Padrão' && "Anomalia estatística: o número/terminal está muito abaixo da média esperada."}
-                          {bias.type === 'Lei do Terceiro' && "Análise matemática de repetição e dormência em ciclos de 37 giros."}
+                          {bias.type === 'Lei do Terceiro' && "A Lei do Terceiro diz que em 37 giros, 1/3 dos números não sai, 1/3 sai uma vez e 1/3 repete. O sistema indica o que falta acontecer."}
                           {bias.type === 'Pêndulo' && "A bola está saltando de um lado para o outro do cilindro em ressonância."}
                           {bias.type === 'Geometria' && "Padrão detectado no tapete de apostas (Dúzias ou Colunas)."}
                           {bias.type === 'Fibonacci' && "A distância entre as quedas segue a sequência matemática de Fibonacci."}
@@ -492,7 +492,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       </div>
 
       {/* Right Column: Google Search & Browser */}
-      <div className="lg:col-span-6 lg:sticky lg:top-8 self-start space-y-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 800px' }}>
+      <div className="lg:col-span-6 lg:sticky lg:top-8 self-start space-y-6">
         {/* Manual Input Terminal */}
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center justify-between mb-6">

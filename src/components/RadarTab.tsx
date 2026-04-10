@@ -24,7 +24,7 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-12 space-y-6">
           {/* Radar de Viés Estatístico */}
-          <section className="glass-card rounded-xl p-4 relative overflow-hidden" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 600px' }}>
+          <section className="glass-card rounded-xl p-4 relative overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-gold-primary/10 flex items-center justify-center">
@@ -81,6 +81,11 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                   } else if (bias.type === 'Tendência de Cores') {
                     const color = bias.value.toLowerCase().includes('vermelho') ? 'red' : 'black';
                     targetNumbers = Array.from({length: 37}, (_, i) => i).filter(n => ROULETTE_NUMBERS[n].color === color);
+                  } else if (bias.type === 'Lei do Terceiro') {
+                    const match = bias.value.match(/Alvos: ([\d, ]+)/);
+                    if (match) {
+                      targetNumbers = match[1].split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+                    }
                   }
 
                     const isMirrorBias = bias.type.includes('Espelho');
@@ -195,29 +200,30 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
 
                 switch (rule.type) {
                   case 'color': 
-                    isMatch = lastN.every(n => n.color === rule.value);
+                    isMatch = lastN.every(n => n && n.color === rule.value);
                     ruleLabel = `${rule.threshold}x ${rule.value === 'red' ? 'Vermelho' : 'Preto'}`;
                     break;
                   case 'parity': 
-                    isMatch = lastN.every(n => rule.value === 'even' ? n.isEven : (!n.isEven && n.num !== 0));
+                    isMatch = lastN.every(n => n && (rule.value === 'even' ? n.isEven : (!n.isEven && n.num !== 0)));
                     ruleLabel = `${rule.threshold}x ${rule.value === 'even' ? 'Par' : 'Ímpar'}`;
                     break;
                   case 'highlow': 
-                    isMatch = lastN.every(n => rule.value === 'high' ? n.isHigh : (!n.isHigh && n.num !== 0));
+                    isMatch = lastN.every(n => n && (rule.value === 'high' ? n.isHigh : (!n.isHigh && n.num !== 0)));
                     ruleLabel = `${rule.threshold}x ${rule.value === 'high' ? 'Alto' : 'Baixo'}`;
                     break;
                   case 'dozen': 
-                    isMatch = lastN.every(n => n.dozen === Number(rule.value));
+                    isMatch = lastN.every(n => n && n.dozen === Number(rule.value));
                     ruleLabel = `${rule.threshold}x ${rule.value}ª Dúzia`;
                     break;
                   case 'column': 
-                    isMatch = lastN.every(n => n.column === Number(rule.value));
+                    isMatch = lastN.every(n => n && n.column === Number(rule.value));
                     ruleLabel = `${rule.threshold}x ${rule.value}ª Coluna`;
                     break;
                   case 'terminalGroup': 
                     isMatch = lastN.every(n => {
+                      if (!n) return false;
                       const terminal = n.num % 10;
-                      if (rule.value === '1') return [1, 4, 7].includes(terminal);
+                      if (rule.value === '1') return [0, 1, 4, 7].includes(terminal);
                       if (rule.value === '2') return [2, 5, 8].includes(terminal);
                       if (rule.value === '3') return [3, 6, 9].includes(terminal);
                       return false;
@@ -225,7 +231,7 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                     ruleLabel = `${rule.threshold}x Grupo Terminal ${rule.value}`;
                     break;
                   case 'terminal': 
-                    isMatch = lastN.every(n => (n.num % 10) === Number(rule.value));
+                    isMatch = lastN.every(n => n && (n.num % 10) === Number(rule.value));
                     ruleLabel = `${rule.threshold}x Terminal ${rule.value}`;
                     break;
                 }

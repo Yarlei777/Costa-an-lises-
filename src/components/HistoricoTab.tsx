@@ -38,7 +38,7 @@ const HistoricoTab: React.FC<HistoricoTabProps> = React.memo(({ history, setHist
           </div>
         </div>
 
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 500px' }}>
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
           {displayHistory.map((num, i) => {
             const color = num === 0 ? 'bg-green-600 text-white' : 
               [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36].includes(num) ? 'bg-red-600 text-white' : 'bg-zinc-900 text-white';

@@ -76,7 +76,7 @@ export const SECTOR_PROBABILITIES = {
 };
 
 export const FAMILIAS_CFG = {
-  f147: [1, 4, 7],
+  f147: [0, 1, 4, 7],
   f258: [2, 5, 8],
   f369: [3, 6, 9]
 };

@@ -209,7 +209,7 @@ const ALERT_CONFIG_TYPES = [
   { id: 'highlow', label: 'Alto/Baixo', values: [{id: 'high', label: 'Alto'}, {id: 'low', label: 'Baixo'}] },
   { id: 'dozen', label: 'Dúzia', values: [{id: '1', label: '1ª Dúzia'}, {id: '2', label: '2ª Dúzia'}, {id: '3', label: '3ª Dúzia'}] },
   { id: 'column', label: 'Coluna', values: [{id: '1', label: '1ª Coluna'}, {id: '2', label: '2ª Coluna'}, {id: '3', label: '3ª Coluna'}] },
-  { id: 'terminalGroup', label: 'Grupo Terminal', values: [{id: '1', label: 'G1 (1,4,7)'}, {id: '2', label: 'G2 (2,5,8)'}, {id: '3', label: 'G3 (3,6,9)'}] },
+  { id: 'terminalGroup', label: 'Grupo Terminal', values: [{id: '1', label: 'G1 (0,1,4,7)'}, {id: '2', label: 'G2 (2,5,8)'}, {id: '3', label: 'G3 (3,6,9)'}] },
   { id: 'terminal', label: 'Terminal', values: Array.from({length: 10}, (_, i) => ({id: i.toString(), label: `T-${i}`})) },
 ];
 
@@ -291,21 +291,28 @@ export default function App() {
     setEngineWeights(prev => {
       const newWeights = { ...prev };
 
+      // Decay weights towards 1.0 slowly to prevent them from getting stuck
+      newWeights.neural += (1.0 - newWeights.neural) * 0.05;
+      newWeights.markov += (1.0 - newWeights.markov) * 0.05;
+      newWeights.sector += (1.0 - newWeights.sector) * 0.05;
+      newWeights.bias += (1.0 - newWeights.bias) * 0.05;
+      newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
+
       // 1. If table is very chaotic (high unique numbers), reduce Neural/Markov and increase Sector/Bias
       if (chaos > 0.8) {
-        newWeights.neural = 0.7;
-        newWeights.markov = 0.6;
-        newWeights.sector = 1.4;
-        newWeights.bias = 1.3;
-        newWeights.shortTerm = 1.5; // Increase short-term focus in chaos
+        newWeights.neural = Math.max(0.5, newWeights.neural - 0.1);
+        newWeights.markov = Math.max(0.5, newWeights.markov - 0.1);
+        newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
+        newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
+        newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
       } 
       // 2. If table is repeating (low unique numbers), increase Neural/Markov
       else if (chaos < 0.4) {
-        newWeights.neural = 1.5;
-        newWeights.markov = 1.4;
-        newWeights.sector = 0.8;
-        newWeights.bias = 0.8;
-        newWeights.shortTerm = 0.9;
+        newWeights.neural = Math.min(2.0, newWeights.neural + 0.1);
+        newWeights.markov = Math.min(2.0, newWeights.markov + 0.1);
+        newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
+        newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
+        newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
       }
       // 3. If there is strong sector concentration, boost Sector weight
       if (maxSectorCount >= 5) {
@@ -367,8 +374,12 @@ export default function App() {
         if (currentUser) {
           try {
             const session = await getUserSession(currentUser.uid);
-            if (session && session.history) {
-              setHistory(session.history);
+            if (session) {
+              if (session.history) {
+                const validHistory = session.history.filter((n: any) => typeof n === 'number' && n >= 0 && n <= 36);
+                setHistory(validHistory);
+              }
+              if (session.customRules) setCustomRules(session.customRules);
             }
           } catch (err) {
             console.error("Error fetching session:", err);
@@ -387,7 +398,7 @@ export default function App() {
     if (!user || history.length === 0) return;
     
     const timer = setTimeout(() => {
-      saveUserSession(user.uid, history).catch(err => {
+      saveUserSession(user.uid, history, customRules).catch(err => {
         console.error("Error saving session:", err);
       });
     }, 5000); // Sync every 5 seconds of inactivity
@@ -403,19 +414,25 @@ export default function App() {
   }, [history]);
 
   const addNumber = React.useCallback((num: number | number[]) => {
+    // Validate input
+    const validate = (n: any): n is number => typeof n === 'number' && n >= 0 && n <= 36;
+    
+    if (Array.isArray(num)) {
+      const validNums = num.filter(validate);
+      if (validNums.length === 0) return;
+      setLastNumber(validNums[0]);
+      setHistory(prev => [...validNums, ...prev].slice(0, 500));
+      toast.success(`${validNums.length} números adicionados ao histórico.`);
+      return;
+    }
+
+    if (!validate(num)) return;
+
     // Simulate haptic feedback
     if (window.navigator.vibrate) {
       window.navigator.vibrate(20);
     }
     
-    if (Array.isArray(num)) {
-      if (num.length === 0) return;
-      setLastNumber(num[0]);
-      setHistory(prev => [...num, ...prev].slice(0, 500));
-      toast.success(`${num.length} números adicionados ao histórico.`);
-      return;
-    }
-
     if (ballisticMode) {
       if (currentDropPoint === null) {
         setCurrentDropPoint(num);
@@ -474,6 +491,16 @@ export default function App() {
   };
 
   // Advanced Statistics & Prediction Engine (Ensemble Module)
+  useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      console.error("Unhandled promise rejection:", event.reason);
+      // Prevent the default browser behavior (logging to console) if we handled it
+      // event.preventDefault(); 
+    };
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => window.removeEventListener('unhandledrejection', handleRejection);
+  }, []);
+
   const stats = useMemo(() => {
     if (history.length === 0) return null;
 
@@ -495,6 +522,7 @@ export default function App() {
 
     const numberFrequency: Record<number, number> = {};
     const terminalFrequency: Record<number, number> = {};
+    const contextTargets: number[] = [];
     
     // Sector Analysis (Voisins, Tiers, Orphelins, Jeu Zero)
     const sectorCounts = { voisins: 0, tiers: 0, orphelins: 0, jeuZero: 0 };
@@ -522,6 +550,7 @@ export default function App() {
       if (block.length === 0) break;
       const bCounts = { voisins: 0, tiers: 0, orphelins: 0 };
       for (const n of block) {
+        if (typeof n !== 'number' || n < 0 || n > 36) continue;
         if (voisinsSet.has(n)) bCounts.voisins++;
         else if (tiersSet.has(n)) bCounts.tiers++;
         else if (orphelinsSet.has(n)) bCounts.orphelins++;
@@ -539,6 +568,7 @@ export default function App() {
 
     last200.forEach((num) => {
       const data = ROULETTE_NUMBERS[num];
+      if (!data) return;
       if (data.color === 'red') counts.red++;
       else if (data.color === 'black') counts.black++;
       else counts.green++;
@@ -577,7 +607,7 @@ export default function App() {
         else counts.col3++;
 
         const terminal = num % 10;
-        if (terminal === 1 || terminal === 4 || terminal === 7) counts.termGroup1++;
+        if (terminal === 1 || terminal === 4 || terminal === 7 || terminal === 0) counts.termGroup1++;
         else if (terminal === 2 || terminal === 5 || terminal === 8) counts.termGroup2++;
         else if (terminal === 3 || terminal === 6 || terminal === 9) counts.termGroup3++;
       }
@@ -662,9 +692,9 @@ export default function App() {
 
     // 3. Terminal Bias
     const terminalGroups = [
-      { name: 'G1 (1,4,7)', count: counts.termGroup1, expected: 12/37 },
-      { name: 'G2 (2,5,8)', count: counts.termGroup2, expected: 12/37 },
-      { name: 'G3 (3,6,9)', count: counts.termGroup3, expected: 12/37 },
+      { name: 'G1 (0,1,4,7)', count: counts.termGroup1, expected: 15/37 },
+      { name: 'G2 (2,5,8)', count: counts.termGroup2, expected: 11/37 },
+      { name: 'G3 (3,6,9)', count: counts.termGroup3, expected: 11/37 },
     ];
 
     terminalGroups.forEach(group => {
@@ -760,8 +790,8 @@ export default function App() {
       const last4 = (history || []).slice(0, 4);
       
       // Padrão de Cores (Sequência Longa)
-      const colors = last4.map(n => ROULETTE_NUMBERS[n].color);
-      if (colors.every(c => c === 'red') || colors.every(c => c === 'black')) {
+      const colors = last4.map(n => ROULETTE_NUMBERS[n]?.color).filter(Boolean);
+      if (colors.length === 4 && (colors.every(c => c === 'red') || colors.every(c => c === 'black'))) {
         detectedBiases.push({
           type: 'Padrão Visual',
           value: `Sequência ${colors[0] === 'red' ? 'Vermelha' : 'Preta'}`,
@@ -1032,7 +1062,6 @@ export default function App() {
     }
 
     // --- CAMADA 8: VIZINHOS HISTÓRICOS (TEMPORAIS) ---
-    const contextTargets: number[] = [];
     if (history.length > 2) {
       const currentNum = history[0];
       const historicalNeighbors: Record<number, number> = {};
@@ -1453,9 +1482,11 @@ export default function App() {
         once.forEach(num => {
           numberScores[num] += 80 * engineWeights.bias;
         });
+        const bestOnce = [...once].sort((a, b) => last37.indexOf(a) - last37.indexOf(b)).slice(0, 8);
+        bestOnce.forEach(n => contextTargets.push(n));
         detectedBiases.push({
           type: 'Lei do Terceiro',
-          value: `Cota de repetição baixa (${multiple.length}/12). Números únicos em alta.`,
+          value: `Faltam Repetições (${multiple.length}/12). Alvos: ${bestOnce.join(', ')}`,
           confidence: 88
         });
       }
@@ -1466,9 +1497,11 @@ export default function App() {
          multiple.forEach(num => {
            numberScores[num] += 60 * engineWeights.bias;
          });
+         const bestMultiple = [...multiple].sort((a, b) => (thirdsCounts[b] || 0) - (thirdsCounts[a] || 0)).slice(0, 8);
+         bestMultiple.forEach(n => contextTargets.push(n));
          detectedBiases.push({
           type: 'Lei do Terceiro',
-          value: `Mesa concentrada (${sleeping.length} dormindo). Favorecendo repetidores.`,
+          value: `Mesa Viciada (${sleeping.length} atrasados). Alvos: ${bestMultiple.join(', ')}`,
           confidence: 85
         });
       }
@@ -1651,6 +1684,84 @@ export default function App() {
       }
     }
 
+    // --- CAMADA 26: ANÁLISE DE LONGO PRAZO (ESPELHAMENTO DE SEQUÊNCIA) ---
+    if (history.length >= 40) {
+      const seqLen = 2; // Procuramos por pares que se repetem
+      const currentSeq = history.slice(0, seqLen);
+      
+      // Função para pegar vizinhos no cilindro
+      const getNeighbors = (n: number) => {
+        const idx = WHEEL_ORDER.indexOf(n);
+        return [
+          WHEEL_ORDER[(idx - 1 + 37) % 37],
+          n,
+          WHEEL_ORDER[(idx + 1) % 37]
+        ];
+      };
+
+      const currentSeqWithNeighbors = currentSeq.map(getNeighbors);
+
+      // Procurar no passado (ignorando os números mais recentes)
+      for (let i = seqLen; i < history.length - 1; i++) {
+        const pastSeq = history.slice(i, i + seqLen);
+        const nextInPast = history[i - 1]; // O número que veio DEPOIS da sequência no passado
+        
+        if (nextInPast === undefined) continue;
+
+        // 1. Match Exato: 12, 20 -> ? (Se no passado 12, 20 chamou 4)
+        const isExactMatch = pastSeq.every((num, idx) => num === currentSeq[idx]);
+        
+        if (isExactMatch) {
+          numberScores[nextInPast] += 100 * engineWeights.bias;
+          getNeighbors(nextInPast).forEach(n => numberScores[n] += 40 * engineWeights.bias);
+          
+          detectedBiases.push({
+            type: 'Longo Prazo',
+            value: `Sequência Identificada: [${pastSeq.join(',')}] chamou ${nextInPast} no passado.`,
+            confidence: 92
+          });
+          continue;
+        }
+
+        // 2. Match por Vizinhança: (35|12|28), (14|20|1) -> ?
+        const isNeighborMatch = pastSeq.every((num, idx) => currentSeqWithNeighbors[idx].includes(num));
+        
+        if (isNeighborMatch) {
+          const targets = getNeighbors(nextInPast);
+          targets.forEach(n => numberScores[n] += 80 * engineWeights.bias);
+          
+          detectedBiases.push({
+            type: 'Longo Prazo',
+            value: `Espelhamento de Zona: Sequência similar a [${pastSeq.join(',')}] detectada. Alvo: ${nextInPast} e vizinhos.`,
+            confidence: 88
+          });
+        }
+      }
+    }
+
+    // --- CAMADA 25: WHEEL SLICE ANALYSIS (GRANULAR) ---
+    const slices = [
+      [0, 32, 15, 19, 4, 21],
+      [2, 25, 17, 34, 6, 27],
+      [13, 36, 11, 30, 8, 23],
+      [10, 5, 24, 16, 33, 1],
+      [20, 14, 31, 9, 22, 18],
+      [29, 7, 28, 12, 35, 3, 26]
+    ];
+    
+    const last15Slices = history.slice(0, 15);
+    slices.forEach((slice, idx) => {
+      const count = last15Slices.filter(n => slice.includes(n)).length;
+      if (count >= 4) { // Slice quente detectado
+        slice.forEach(n => numberScores[n] += 35 * engineWeights.sector);
+        detectedBiases.push({
+          type: 'Fatia Quente',
+          value: `Fatia ${idx + 1} (${count}/15)`,
+          confidence: Math.min(count * 6, 99)
+        });
+      }
+    });
+
     const sortedNumbers = numberScores
       .map((score, num) => ({ num, score }))
       .sort((a, b) => b.score - a.score);
@@ -1658,7 +1769,7 @@ export default function App() {
     const top8 = (sortedNumbers || []).slice(0, 8);
     
     // Normalize scores to percentages for UI
-    const maxPossibleScore = 1120; // Updated max for new layers
+    const maxPossibleScore = 1400; // Updated max for new Long Term layer
     const targetsWithConfidence = top8.map(t => ({
       num: t.num,
       confidence: Math.min(Math.round((t.score / maxPossibleScore) * 100 * (1.2 - chaosIndex)), 99)
@@ -1677,10 +1788,12 @@ export default function App() {
       (MIRROR_NUMBERS_LIST.includes(mainTarget) && b.type === 'Espelho Direto') ||
       (b.type === 'Terminal Repetido' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
       (b.type === 'Terminal Triplo' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-      (b.type === 'Sequência Histórica' && b.value.includes(`T${mainTarget % 10}`))
+      (b.type === 'Sequência Histórica' && b.value.includes(`T${mainTarget % 10}`)) ||
+      (b.type === 'Lei do Terceiro' && b.value.includes(`${mainTarget}`)) ||
+      (b.type === 'Longo Prazo' && b.value.includes(`${mainTarget}`))
     );
     
-    const isSniper = (mainScore > 450 && sniperBiases.length >= 2) || (mainScore > 600);
+    const isSniper = (mainScore > 550 && sniperBiases.length >= 2) || (mainScore > 800);
     const betPercentage = isSniper ? Math.min(Math.round((mainScore / 800) * 100), 99) : 0;
 
     // Lógica de "Zona de Impacto": Se o top 5 está concentrado em uma área do cilindro
@@ -1755,13 +1868,13 @@ export default function App() {
         return { avgDist, variance, distances };
       })() : null,
       groupPredictions: (() => {
-        const g1 = scores[1] + scores[4] + scores[7];
+        const g1 = scores[1] + scores[4] + scores[7] + scores[0];
         const g2 = scores[2] + scores[5] + scores[8];
         const g3 = scores[3] + scores[6] + scores[9];
         const total = g1 + g2 + g3 || 1;
         
         const preds = [
-          { name: '1.4.7', score: g1, terminals: [1, 4, 7], color: '#BF953F' },
+          { name: '0.1.4.7', score: g1, terminals: [0, 1, 4, 7], color: '#BF953F' },
           { name: '2.5.8', score: g2, terminals: [2, 5, 8], color: '#B38728' },
           { name: '3.6.9', score: g3, terminals: [3, 6, 9], color: '#AA771C' }
         ].map(p => ({
@@ -1893,30 +2006,33 @@ export default function App() {
         // Play a notification sound if not muted
         if (!isMuted) {
           try {
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            
-            // Higher pitch for higher confidence
-            const frequency = bias.confidence > 90 ? 1100 : 880;
-            
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(frequency / 2, audioCtx.currentTime + 0.5);
-            
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.5);
-            setTimeout(() => {
-              if (audioCtx.state !== 'closed') {
-                audioCtx.close().catch(console.error);
-              }
-            }, 600);
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextClass) {
+              const audioCtx = new AudioContextClass();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              
+              // Higher pitch for higher confidence
+              const frequency = bias.confidence > 90 ? 1100 : 880;
+              
+              oscillator.type = 'sine';
+              oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+              oscillator.frequency.exponentialRampToValueAtTime(frequency / 2, audioCtx.currentTime + 0.5);
+              
+              gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+              
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              
+              oscillator.start();
+              oscillator.stop(audioCtx.currentTime + 0.5);
+              setTimeout(() => {
+                if (audioCtx.state !== 'closed') {
+                  audioCtx.close().catch(() => {});
+                }
+              }, 600);
+            }
           } catch (e) {
             console.error("Audio error:", e);
           }
@@ -1928,7 +2044,9 @@ export default function App() {
     customRules.forEach(rule => {
       if (!rule.enabled || history.length < rule.threshold) return;
       
-      const lastN = (history || []).slice(0, rule.threshold).map(n => ROULETTE_NUMBERS[n]);
+      const lastN = (history || []).slice(0, rule.threshold).map(n => ROULETTE_NUMBERS[n]).filter(Boolean);
+      if (lastN.length < rule.threshold) return; // Safety check
+
       let triggered = false;
       let ruleLabel = "";
 
@@ -1956,7 +2074,7 @@ export default function App() {
         case 'terminalGroup': 
           triggered = lastN.every(n => {
             const terminal = n.num % 10;
-            if (rule.value === '1') return [1, 4, 7].includes(terminal);
+            if (rule.value === '1') return [0, 1, 4, 7].includes(terminal);
             if (rule.value === '2') return [2, 5, 8].includes(terminal);
             if (rule.value === '3') return [3, 6, 9].includes(terminal);
             return false;
@@ -1992,27 +2110,30 @@ export default function App() {
           
           if (!isMuted) {
             try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioCtx.createOscillator();
-              const gainNode = audioCtx.createGain();
-              
-              oscillator.type = 'square'; // Distinct sound for custom rules
-              oscillator.frequency.setValueAtTime(660, audioCtx.currentTime);
-              oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3);
-              
-              gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-              
-              oscillator.connect(gainNode);
-              gainNode.connect(audioCtx.destination);
-              
-              oscillator.start();
-              oscillator.stop(audioCtx.currentTime + 0.3);
-              setTimeout(() => {
-                if (audioCtx.state !== 'closed') {
-                  audioCtx.close().catch(console.error);
-                }
-              }, 400);
+              const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+              if (AudioContextClass) {
+                const audioCtx = new AudioContextClass();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.type = 'square'; // Distinct sound for custom rules
+                oscillator.frequency.setValueAtTime(660, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3);
+                
+                gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.3);
+                setTimeout(() => {
+                  if (audioCtx.state !== 'closed') {
+                    audioCtx.close().catch(() => {});
+                  }
+                }, 400);
+              }
             } catch (e) {
               console.error("Audio error:", e);
             }
@@ -2175,19 +2296,20 @@ export default function App() {
               if (!r.enabled || (history || []).length < r.threshold) return false;
               const lastN = (history || []).slice(0, r.threshold).map(n => ROULETTE_NUMBERS[n]);
               switch (r.type) {
-                case 'color': return lastN.every(n => n.color === r.value);
-                case 'parity': return lastN.every(n => r.value === 'even' ? n.isEven : (!n.isEven && n.num !== 0));
-                case 'highlow': return lastN.every(n => r.value === 'high' ? n.isHigh : (!n.isHigh && n.num !== 0));
-                case 'dozen': return lastN.every(n => n.dozen === Number(r.value));
-                case 'column': return lastN.every(n => n.column === Number(r.value));
+                case 'color': return lastN.every(n => n && n.color === r.value);
+                case 'parity': return lastN.every(n => n && (r.value === 'even' ? n.isEven : (!n.isEven && n.num !== 0)));
+                case 'highlow': return lastN.every(n => n && (r.value === 'high' ? n.isHigh : (!n.isHigh && n.num !== 0)));
+                case 'dozen': return lastN.every(n => n && n.dozen === Number(r.value));
+                case 'column': return lastN.every(n => n && n.column === Number(r.value));
                 case 'terminalGroup': return lastN.every(n => {
+                  if (!n) return false;
                   const terminal = n.num % 10;
-                  if (r.value === '1') return [1, 4, 7].includes(terminal);
+                  if (r.value === '1') return [0, 1, 4, 7].includes(terminal);
                   if (r.value === '2') return [2, 5, 8].includes(terminal);
                   if (r.value === '3') return [3, 6, 9].includes(terminal);
                   return false;
                 });
-                case 'terminal': return lastN.every(n => (n.num % 10) === Number(r.value));
+                case 'terminal': return lastN.every(n => n && (n.num % 10) === Number(r.value));
                 default: return false;
               }
             }).length },

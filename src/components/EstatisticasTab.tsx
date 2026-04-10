@@ -47,7 +47,7 @@ const EstatisticasTab: React.FC<EstatisticasTabProps> = React.memo(({
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         {/* Engine Weights Analysis */}
-        <section className="glass-card rounded-[2rem] p-8" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 400px' }}>
+        <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
               <Settings className="w-4 h-4 text-gold-primary" />

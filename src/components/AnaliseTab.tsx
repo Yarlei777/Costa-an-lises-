@@ -28,7 +28,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
       className="grid grid-cols-1 lg:grid-cols-12 gap-10"
     >
       {/* Left: Terminal Analysis */}
-      <div className="lg:col-span-7 space-y-10" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 800px' }}>
+      <div className="lg:col-span-7 space-y-10">
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center gap-3 mb-8">
             <Zap className="w-4 h-4 text-gold-primary" />
@@ -81,7 +81,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center gap-3 mb-8">
             <TrendingUp className="w-4 h-4 text-gold-primary" />
-            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Distribuição de Grupos (1.4.7, 2.5.8, 3.6.9)</h2>
+            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Distribuição de Grupos (0.1.4.7, 2.5.8, 3.6.9)</h2>
           </div>
           
           <div className="h-48 w-full">
@@ -247,7 +247,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
       </div>
 
       {/* Right: Full Bias Monitor */}
-      <div className="lg:col-span-5 space-y-10" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 800px' }}>
+      <div className="lg:col-span-5 space-y-10">
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
