@@ -23,6 +23,8 @@ import {
   Plus,
   Bell,
   BellOff,
+  Volume2,
+  VolumeX,
   Check,
   X,
   Smartphone,
@@ -336,7 +338,8 @@ export default function App() {
     });
   }, [history]);
 
-  const [isMuted, setIsMuted] = useState(false);
+  const [isNotificationsMuted, setIsNotificationsMuted] = useState(false);
+  const [isSoundMuted, setIsSoundMuted] = useState(false);
   const [isAppAuthorized, setIsAppAuthorized] = useState(false);
   const [searchResults, setSearchResults] = useState<string | null>(null);
   const [isSearchingGoogle, setIsSearchingGoogle] = useState(false);
@@ -1969,37 +1972,39 @@ export default function App() {
 
   // Alert & Bias Notification System
   useEffect(() => {
-    if (history.length < 3 || isMuted) return;
+    if (history.length < 3) return;
     
     // 1. Analyze confidence scores of all detected biases and prioritize alerts
     // for those with confidence greater than 85%.
     const highConfidenceBiases = stats?.biases?.filter(b => b.confidence > 85) || [];
     
     highConfidenceBiases.forEach(bias => {
-      const alertMsg = `${bias.type.toUpperCase()}: ${bias.value} (${bias.confidence}%)`;
+      const alertMsg = `${bias.value} (${bias.confidence}%)`;
       // Check if this specific alert for this history length has already been shown
       const alertId = `bias-${bias.type}-${bias.value}-${history.length}`;
       
       if (!dismissedAlerts.includes(alertId)) {
         const isImportant = bias.type === 'Fibonacci' || bias.type === 'Longo Prazo' || bias.confidence > 90;
-        toast.info(alertMsg, {
-          id: alertId,
-          duration: isImportant ? 15000 : 6000,
-          style: {
-            background: '#050505',
-            border: `1px solid ${isImportant ? '#BF953F' : 'rgba(212, 175, 55, 0.2)'}`,
-            color: '#fff',
-            fontFamily: 'inherit',
-            fontSize: '9px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            fontWeight: '900'
-          }
-        });
+        if (!isNotificationsMuted) {
+          toast.success(alertMsg, {
+            id: alertId,
+            duration: isImportant ? 15000 : 6000,
+            style: {
+              background: '#050505',
+              border: `1px solid ${isImportant ? '#22c55e' : 'rgba(34, 197, 94, 0.2)'}`,
+              color: '#fff',
+              fontFamily: 'inherit',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              fontWeight: '900'
+            }
+          });
+        }
         setDismissedAlerts(prev => [...prev, alertId]);
         
         // Play a notification sound if not muted
-        if (!isMuted) {
+        if (!isSoundMuted) {
           try {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             if (AudioContextClass) {
@@ -2083,27 +2088,29 @@ export default function App() {
       }
 
       if (triggered) {
-        const alertMsg = `REGRA CUSTOM: ${ruleLabel}`;
+        const alertMsg = ruleLabel;
         const alertId = `rule-${rule.id}-${history.length}`;
         
         if (!dismissedAlerts.includes(alertId)) {
-          toast.warning(alertMsg, {
-            id: alertId,
-            duration: 10000,
-            style: {
-              background: '#050505',
-              border: '1px solid #BF953F',
-              color: '#BF953F',
-              fontFamily: 'inherit',
-              fontSize: '9px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              fontWeight: '900'
-            }
-          });
+          if (!isNotificationsMuted) {
+            toast.success(alertMsg, {
+              id: alertId,
+              duration: 10000,
+              style: {
+                background: '#050505',
+                border: '1px solid #22c55e',
+                color: '#fff',
+                fontFamily: 'inherit',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontWeight: '900'
+              }
+            });
+          }
           setDismissedAlerts(prev => [...prev, alertId]);
           
-          if (!isMuted) {
+          if (!isSoundMuted) {
             try {
               const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
               if (AudioContextClass) {
@@ -2136,11 +2143,7 @@ export default function App() {
         }
       }
     });
-
-    if (isMuted) {
-      return;
-    }
-  }, [history, stats, customRules, dismissedAlerts, isMuted]);
+  }, [history, stats, customRules, dismissedAlerts, isNotificationsMuted, isSoundMuted]);
 
   if (loading) {
     return (
@@ -2213,11 +2216,10 @@ export default function App() {
               initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
-              className="fixed left-0.5 top-[42%] -translate-y-1/2 z-[100] py-2 px-0.5 neon-green-gradient rounded-[1rem] text-black shadow-[0_0_40px_rgba(34,197,94,0.5)] flex flex-col items-center gap-1 border border-white/20 w-8 max-h-[95vh]"
+              className="fixed left-0.5 top-[42%] -translate-y-1/2 z-[100] py-1.5 px-0.5 neon-green-gradient rounded-full text-black shadow-[0_0_40px_rgba(34,197,94,0.5)] flex flex-col items-center gap-1 border border-white/20 w-7 max-h-[90vh]"
             >
-              <div className="flex flex-col items-center gap-0.5">
+              <div className="flex flex-col items-center">
                 <Zap className="w-3 h-3 animate-bounce fill-black shrink-0" />
-                <span className="[writing-mode:vertical-lr] rotate-180 text-[6px] font-black uppercase tracking-[0.1em] opacity-70 my-0.5">ALVOS</span>
               </div>
               
               <div className="flex flex-col items-center gap-0.5 overflow-y-auto scrollbar-hide w-full px-0">
@@ -2235,6 +2237,45 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+
+      {/* Floating Mute Controls */}
+      <div className="fixed top-2 right-2 z-[60] flex flex-col gap-1.5 sm:flex-row sm:gap-2">
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setIsNotificationsMuted(!isNotificationsMuted)}
+          title={isNotificationsMuted ? "Ativar Notificações Visuais" : "Silenciar Notificações Visuais"}
+          className={`p-1 rounded-md border transition-all shadow-lg ${
+            isNotificationsMuted 
+              ? 'bg-red-500/20 border-red-500/40 text-red-500' 
+              : 'bg-gold-primary/20 border-gold-primary/40 text-gold-primary'
+          }`}
+        >
+          {isNotificationsMuted ? (
+            <BellOff className="w-2.5 h-2.5" />
+          ) : (
+            <Bell className="w-2.5 h-2.5" />
+          )}
+        </motion.button>
+
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setIsSoundMuted(!isSoundMuted)}
+          title={isSoundMuted ? "Ativar Som" : "Silenciar Som"}
+          className={`p-1 rounded-md border transition-all shadow-lg ${
+            isSoundMuted 
+              ? 'bg-red-500/20 border-red-500/40 text-red-500' 
+              : 'bg-gold-primary/20 border-gold-primary/40 text-gold-primary'
+          }`}
+        >
+          {isSoundMuted ? (
+            <VolumeX className="w-2.5 h-2.5" />
+          ) : (
+            <Volume2 className="w-2.5 h-2.5" />
+          )}
+        </motion.button>
       </div>
 
       {/* Header */}
@@ -2282,25 +2323,7 @@ export default function App() {
               </motion.button>
             )}
 
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setIsMuted(!isMuted)}
-              className={`p-3 rounded-2xl border transition-all flex items-center gap-2 group ${
-                isMuted 
-                  ? 'bg-red-500/10 border-red-500/30 text-red-500' 
-                  : 'bg-gold-primary/10 border-gold-primary/30 text-gold-primary'
-              }`}
-            >
-              {isMuted ? (
-                <BellOff className="w-5 h-5 group-hover:shake" />
-              ) : (
-                <Bell className="w-5 h-5 group-hover:animate-bounce" />
-              )}
-              <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">
-                {isMuted ? 'Silenciado' : 'Notificações'}
-              </span>
-            </motion.button>
+            {/* Removed old mute button */}
           </div>
         </div>
 
