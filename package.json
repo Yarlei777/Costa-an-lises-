@@ -10,9 +10,15 @@
     "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "cap:sync": "npx cap sync",
+    "cap:open": "npx cap open android",
+    "cap:add": "npx cap add android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
     "@tailwindcss/vite": "^4.1.14",
     "@tensorflow/tfjs": "^4.22.0",
     "@vitejs/plugin-react": "^5.0.4",

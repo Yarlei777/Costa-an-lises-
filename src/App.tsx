@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'rea
 import { motion, AnimatePresence } from 'motion/react';
 import RouletteWheelVisual from './components/RouletteWheelVisual';
 
-// import ErrorBoundary from './components/ErrorBoundary';
+import ErrorBoundary from './components/ErrorBoundary';
 import { 
   History, 
   TrendingUp, 
@@ -147,21 +147,20 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 
 // Utility to handle chunk load errors for lazy components
 const lazyRetry = (componentImport: () => Promise<any>) => {
-  return lazy(async () => {
-    try {
-      return await componentImport();
-    } catch (error) {
-      // Check if it's a chunk load error
-      if (error instanceof Error && 
-         (error.message.includes('Failed to fetch dynamically imported module') || 
-          error.message.includes('Importing a module script failed'))) {
-        // Force a page reload to get the latest version
-        window.location.reload();
-        return { default: () => null };
-      }
-      throw error;
+  return lazy(() => componentImport().catch(error => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Check if it's a chunk load error
+    if (errorMessage.includes('Failed to fetch dynamically imported module') || 
+        errorMessage.includes('Importing a module script failed')) {
+      // Force a page reload to get the latest version
+      window.location.reload();
+      return { default: () => null };
     }
-  });
+    
+    console.error("Lazy load error:", error);
+    throw error;
+  }));
 };
 
 // Lazy-loaded components
@@ -173,6 +172,7 @@ const HistoricoTab = lazyRetry(() => import("./components/HistoricoTab"));
 const TerminaisTab = lazyRetry(() => import("./components/TerminaisTab"));
 const RadarTab = lazyRetry(() => import("./components/RadarTab"));
 const LegalModal = lazyRetry(() => import("./components/LegalModals"));
+const LoginScreen = lazyRetry(() => import("./components/LoginScreen"));
 
 // Loading fallback component
 const TabLoading = () => (
@@ -337,6 +337,7 @@ export default function App() {
   }, [history]);
 
   const [isMuted, setIsMuted] = useState(false);
+  const [isAppAuthorized, setIsAppAuthorized] = useState(false);
   const [searchResults, setSearchResults] = useState<string | null>(null);
   const [isSearchingGoogle, setIsSearchingGoogle] = useState(false);
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
@@ -389,6 +390,9 @@ export default function App() {
       } catch (err) {
         console.error("Error in auth state change:", err);
       }
+    }, (error) => {
+      console.error("Auth state change error:", error);
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -491,16 +495,6 @@ export default function App() {
   };
 
   // Advanced Statistics & Prediction Engine (Ensemble Module)
-  useEffect(() => {
-    const handleRejection = (event: PromiseRejectionEvent) => {
-      console.error("Unhandled promise rejection:", event.reason);
-      // Prevent the default browser behavior (logging to console) if we handled it
-      // event.preventDefault(); 
-    };
-    window.addEventListener('unhandledrejection', handleRejection);
-    return () => window.removeEventListener('unhandledrejection', handleRejection);
-  }, []);
-
   const stats = useMemo(() => {
     if (history.length === 0) return null;
 
@@ -1987,17 +1981,18 @@ export default function App() {
       const alertId = `bias-${bias.type}-${bias.value}-${history.length}`;
       
       if (!dismissedAlerts.includes(alertId)) {
+        const isImportant = bias.type === 'Fibonacci' || bias.type === 'Longo Prazo' || bias.confidence > 90;
         toast.info(alertMsg, {
           id: alertId,
-          duration: 4000,
+          duration: isImportant ? 15000 : 6000,
           style: {
             background: '#050505',
-            border: '1px solid rgba(212, 175, 55, 0.2)',
+            border: `1px solid ${isImportant ? '#BF953F' : 'rgba(212, 175, 55, 0.2)'}`,
             color: '#fff',
             fontFamily: 'inherit',
-            fontSize: '10px',
+            fontSize: '9px',
             textTransform: 'uppercase',
-            letterSpacing: '0.1em',
+            letterSpacing: '0.05em',
             fontWeight: '900'
           }
         });
@@ -2094,15 +2089,15 @@ export default function App() {
         if (!dismissedAlerts.includes(alertId)) {
           toast.warning(alertMsg, {
             id: alertId,
-            duration: 5000,
+            duration: 10000,
             style: {
               background: '#050505',
               border: '1px solid #BF953F',
               color: '#BF953F',
               fontFamily: 'inherit',
-              fontSize: '10px',
+              fontSize: '9px',
               textTransform: 'uppercase',
-              letterSpacing: '0.1em',
+              letterSpacing: '0.05em',
               fontWeight: '900'
             }
           });
@@ -2158,27 +2153,41 @@ export default function App() {
     );
   }
 
+  if (!isAppAuthorized) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<TabLoading />}>
+          <LoginScreen onLogin={() => setIsAppAuthorized(true)} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-gold-primary/30 relative overflow-hidden" translate="no">
+    <ErrorBoundary>
+      <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-gold-primary/30 relative overflow-hidden" translate="no">
       {/* Toaster for notifications */}
       <Toaster 
-        position="top-center" 
+        position="bottom-right" 
         theme="dark" 
         richColors 
         closeButton 
         toastOptions={{
           style: {
-            background: 'rgba(5, 5, 5, 0.8)',
+            background: 'rgba(5, 5, 5, 0.95)',
             backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(191, 149, 63, 0.3)',
-            color: '#BF953F',
+            border: '1px solid rgba(191, 149, 63, 0.4)',
+            color: '#fff',
             fontFamily: 'inherit',
-            fontSize: '11px',
+            fontSize: '10px',
             textTransform: 'uppercase',
-            letterSpacing: '0.15em',
+            letterSpacing: '0.1em',
             fontWeight: '900',
-            borderRadius: '1rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 20px rgba(191, 149, 63, 0.05)'
+            borderRadius: '0.5rem',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(191, 149, 63, 0.1)',
+            width: '180px',
+            minHeight: '60px',
+            padding: '12px'
           }
         }}
       />
@@ -2201,18 +2210,26 @@ export default function App() {
         <AnimatePresence>
           {(stats?.prediction?.confidence || 0) > 85 && (
             <motion.div 
-              initial={{ opacity: 0, y: -10, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 neon-green-gradient rounded-xl text-[10px] font-black text-black tracking-widest uppercase shadow-[0_0_30px_rgba(34,197,94,0.6)] flex items-center gap-2 border border-white/20 max-w-[95vw] w-max"
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              className="fixed left-0.5 top-[42%] -translate-y-1/2 z-[100] py-2 px-0.5 neon-green-gradient rounded-[1rem] text-black shadow-[0_0_40px_rgba(34,197,94,0.5)] flex flex-col items-center gap-1 border border-white/20 w-8 max-h-[95vh]"
             >
-              <Zap className="w-3.5 h-3.5 animate-bounce fill-black shrink-0" />
-              <div className="flex flex-wrap items-center justify-center gap-1">
-                <span className="opacity-80 mr-1">ALVOS:</span>
-                {allCylinderTargets.map((num, i) => (
-                  <span key={num} className="bg-black/20 px-1.5 py-0.5 rounded text-[9px]">
+              <div className="flex flex-col items-center gap-0.5">
+                <Zap className="w-3 h-3 animate-bounce fill-black shrink-0" />
+                <span className="[writing-mode:vertical-lr] rotate-180 text-[6px] font-black uppercase tracking-[0.1em] opacity-70 my-0.5">ALVOS</span>
+              </div>
+              
+              <div className="flex flex-col items-center gap-0.5 overflow-y-auto scrollbar-hide w-full px-0">
+                {allCylinderTargets.map((num) => (
+                  <motion.span 
+                    key={num} 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="bg-black/10 w-6 h-6 min-h-[24px] flex items-center justify-center rounded text-[9px] font-black border border-black/5"
+                  >
                     {num}
-                  </span>
+                  </motion.span>
                 ))}
               </div>
             </motion.div>
@@ -2527,5 +2544,6 @@ export default function App() {
         />
       </Suspense>
     </div>
+    </ErrorBoundary>
   );
 }

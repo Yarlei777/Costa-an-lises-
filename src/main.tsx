@@ -15,7 +15,13 @@ window.addEventListener('error', (event) => {
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('Unhandled promise rejection:', event.reason);
+  // Prevent the default browser behavior (logging to console)
+  event.preventDefault();
+  
+  const reason = event.reason;
+  const message = reason instanceof Error ? reason.message : String(reason);
+  
+  console.error('Unhandled promise rejection:', message, reason);
 });
 
 try {

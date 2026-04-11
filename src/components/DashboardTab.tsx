@@ -317,7 +317,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             <div className="flex items-center justify-between px-2 pt-4">
               <div className="flex items-center gap-2">
                 <Target className="w-4 h-4 text-gold-primary" />
-                <span className="text-[10px] uppercase tracking-[0.4em] text-zinc-600 font-black">Números Alvos</span>
+                <span className="text-[7px] uppercase tracking-[0.4em] text-zinc-600 font-black">Números Alvos</span>
               </div>
               <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{targetZone}</div>
             </div>

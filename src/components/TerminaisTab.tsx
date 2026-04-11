@@ -30,7 +30,7 @@ const TerminaisTab: React.FC<TerminaisTabProps> = React.memo(({ stats, history }
             </div>
 
             <div className="relative z-10">
-              <span className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-500 mb-4 block">Próximo Alvo Sugerido</span>
+              <span className="text-[7px] font-black uppercase tracking-[0.5em] text-zinc-500 mb-4 block">Próximo Alvo Sugerido</span>
               <h2 className="text-7xl font-black gold-text tracking-tighter italic mb-2">
                 {stats?.groupPredictions?.[0]?.name || '---'}
               </h2>
