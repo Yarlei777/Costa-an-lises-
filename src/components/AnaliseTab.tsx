@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Zap, TrendingUp, BarChart3, RotateCcw, Activity } from 'lucide-react';
+import { Zap, TrendingUp, BarChart3, RotateCcw, Activity, ShieldCheck } from 'lucide-react';
 import { Stats } from '../types';
 import { ROULETTE_NUMBERS } from '../constants';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Cell } from 'recharts';
@@ -248,6 +248,83 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
 
       {/* Right: Full Bias Monitor */}
       <div className="lg:col-span-5 space-y-10">
+        {/* System Status Layer */}
+        <section className="glass-card rounded-[2rem] p-8 border-gold-primary/10">
+          <div className="flex items-center gap-3 mb-6">
+            <Activity className="w-4 h-4 text-gold-primary" />
+            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Status dos Motores</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {stats?.systemStatus && Object.entries(stats.systemStatus).map(([engine, status]) => (
+              <div key={engine} className="p-3 bg-white/5 rounded-xl border border-white/5 flex items-center justify-between">
+                <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{engine}</span>
+                <div className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${status === 'ONLINE' || status === 'ACTIVE' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-gold-primary animate-pulse'}`} />
+                  <span className={`text-[8px] font-black ${status === 'ONLINE' || status === 'ACTIVE' ? 'text-emerald-500' : 'text-gold-primary'}`}>{status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Neural Engine Insights */}
+        <section className="glass-card rounded-[2rem] p-8 border-gold-primary/10">
+          <div className="flex items-center gap-3 mb-6">
+            <Zap className="w-4 h-4 text-gold-primary" />
+            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Insights Neurais (Deep Learning)</h2>
+          </div>
+          <div className="space-y-3">
+            {stats?.prediction?.neuralTop?.map((item, i) => (
+              <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border ${ROULETTE_NUMBERS[item.num].color === 'red' ? 'bg-red-500/20 border-red-500/30 text-red-500' : ROULETTE_NUMBERS[item.num].color === 'black' ? 'bg-zinc-800 border-white/10 text-white' : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-500'}`}>
+                    {item.num}
+                  </div>
+                  <span className="text-[10px] font-bold text-zinc-400">Probabilidade Neural</span>
+                </div>
+                <span className="text-xs font-black gold-text">{(item.prob * 100).toFixed(1)}%</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Active Analysis Layers Section */}
+        <section className="glass-card rounded-[2rem] p-8 border-gold-primary/20">
+          <div className="flex items-center gap-3 mb-8">
+            <ShieldCheck className="w-4 h-4 text-gold-primary" />
+            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Camadas de Análise Ativas</h2>
+          </div>
+          
+          <div className="space-y-4">
+            {[
+              { id: 1, name: "Motor de Balística Real", desc: "Cálculo de trajetória física e ponto de impacto", status: "ACTIVE" },
+              { id: 2, name: "Camada LSTM Primária (256)", desc: "Reconhecimento de padrões sequenciais profundos", status: "ONLINE" },
+              { id: 3, name: "Fusão de Atributos (128)", desc: "Associação entre setor, terminais e dezenas", status: "ONLINE" },
+              { id: 4, name: "Abstração Comportamental (64)", desc: "Filtragem de ruído e padrões de erro", status: "ONLINE" },
+              { id: 5, name: "Output Probabilístico Neural", desc: "Distribuição Softmax sobre 37 alvos", status: "ACTIVE" },
+              { id: 6, name: "Análise de Espelhos Digitais", desc: "Correlação determinística entre terminais espelhados", status: "ONLINE" },
+              { id: 7, name: "Convergência de Grupos Terminais", desc: "Análise de fluxo entre os grupos 0.1.4.7, 2.5.8, 3.6.9", status: "ONLINE" },
+              { id: 8, name: "Monitor de Vácuo Recorrente", desc: "Identificação de zonas sem repetição em ciclos curtos", status: "ACTIVE" },
+              { id: 9, name: "Assinatura do Dealer (Salto)", desc: "Detecção de repetição mecânica do lançamento", status: "ONLINE" },
+              { id: 10, name: "Super Convergência (Layer 30)", desc: stats?.prediction?.entrySignal === 'PLAY' ? "ENTRADA CONFIRMADA PELO SISTEMA" : "Nível de reconciliação de múltiplos motores", status: stats?.prediction?.entrySignal === 'PLAY' ? "JOGAR AGORA" : stats?.prediction?.entrySignal === 'WAIT_CONFIRM' ? "CONFIRMANDO" : "ONLINE" }
+            ].map((layer) => (
+              <div key={layer.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all group ${layer.status === 'JOGAR AGORA' ? 'bg-emerald-500/10 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/5 hover:border-gold-primary/30'}`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black transition-all ${layer.status === 'JOGAR AGORA' ? 'bg-emerald-500 text-black' : 'bg-gold-primary/10 border border-gold-primary/20 text-gold-primary group-hover:bg-gold-primary group-hover:text-black'}`}>
+                  {layer.id}
+                </div>
+                <div className="flex-1">
+                  <h3 className={`text-[10px] font-black uppercase tracking-widest ${layer.status === 'JOGAR AGORA' ? 'text-emerald-500' : 'text-white'}`}>{layer.name}</h3>
+                  <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-tighter mt-0.5">{layer.desc}</p>
+                </div>
+                <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${layer.status === 'JOGAR AGORA' ? 'bg-emerald-500 text-white border-emerald-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'}`}>
+                  <div className={`w-1 h-1 rounded-full ${layer.status === 'JOGAR AGORA' ? 'bg-white animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
+                  <span className="text-[7px] font-black uppercase">{layer.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">

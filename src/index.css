@@ -28,6 +28,14 @@ body {
   font-family: var(--font-sans);
   overflow-x: hidden;
   position: relative;
+  text-rendering: optimizeSpeed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Performance Optimizations */
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mesh-bg {
@@ -68,6 +76,7 @@ body {
   overflow: hidden;
   will-change: transform;
   contain: content;
+  content-visibility: auto;
 }
 
 .glass-card::before {

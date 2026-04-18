@@ -87,11 +87,13 @@ export const ESPELHOS_CFG = {
   setorZero: [0, 2, 3, 5, 8]
 };
 
+export const CAMUFLADOS_NUMBERS = [14, 13, 31, 12, 21, 33, 16, 19, 22, 2, 32, 23, 26, 29, 6, 9, 11, 1, 3, 4, 5, 7, 8];
+
 export const MIRROR_NUMBERS_LIST = [16, 19, 12, 21, 13, 31, 23, 32, 6, 9];
 
 export const ALERT_TYPES = [
   { id: 'streak', title: 'Sequência Detectada', icon: Zap, color: 'text-gold-primary' },
   { id: 'delay', title: 'Atraso Crítico', icon: Activity, color: 'text-red-500' },
   { id: 'bias', title: 'Viés Estatístico', icon: TrendingUp, color: 'text-emerald-500' },
-  { id: 'omega', title: 'Omega Alert', icon: Target, color: 'text-red-600' }
+  { id: 'omega', title: 'Omega Alert', icon: Target, color: 'text-emerald-500' }
 ];

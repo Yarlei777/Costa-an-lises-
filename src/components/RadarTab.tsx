@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Radar, Target, Zap } from 'lucide-react';
 import { Stats, CustomAlertRule, RouletteNumber } from '../types';
-import { COLORS, ROULETTE_NUMBERS, WHEEL_ORDER, MIRROR_NUMBERS_LIST } from '../constants';
+import { COLORS, ROULETTE_NUMBERS, WHEEL_ORDER, MIRROR_NUMBERS_LIST, CAMUFLADOS_NUMBERS } from '../constants';
 
 interface RadarTabProps {
   stats: Stats | null;
@@ -86,23 +86,45 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                     if (match) {
                       targetNumbers = match[1].split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
                     }
+                  } else if (bias.type === 'Camuflados') {
+                    const sum = parseInt(bias.value.match(/\d+/)?.[0] || "");
+                    if (!isNaN(sum)) {
+                      targetNumbers = CAMUFLADOS_NUMBERS.filter(n => {
+                        let s = n.toString().split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+                        while (s >= 10) s = s.toString().split('').reduce((acc, d) => acc + parseInt(d), 0);
+                        return s === sum;
+                      });
+                    }
                   }
 
                     const isMirrorBias = bias.type.includes('Espelho');
+                    const isCamufladosBias = bias.type === 'Camuflados';
 
                     return (
                       <div 
                         key={`${bias.type}-${bias.value}`}
-                        className={`p-3 rounded-xl bg-white/5 border relative overflow-hidden group transition-all animate-in fade-in slide-in-from-bottom-4 duration-500 ${isMirrorBias ? 'border-pink-500/20 hover:border-pink-500/40' : 'border-white/10 hover:border-gold-primary/30'}`}
+                        className={`p-3 rounded-xl bg-white/5 border relative overflow-hidden group transition-all animate-in fade-in slide-in-from-bottom-4 duration-500 ${
+                          isMirrorBias ? 'border-pink-500/20 hover:border-pink-500/40' : 
+                          isCamufladosBias ? 'border-cyan-500/20 hover:border-cyan-500/40' :
+                          'border-white/10 hover:border-gold-primary/30'
+                        }`}
                         style={{ animationDelay: `${i * 100}ms`, animationFillMode: 'both' }}
                       >
                         <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition-opacity">
-                          <Target className={`w-8 h-8 ${isMirrorBias ? 'text-pink-500' : 'text-gold-primary'}`} />
+                          <Target className={`w-8 h-8 ${
+                            isMirrorBias ? 'text-pink-500' : 
+                            isCamufladosBias ? 'text-cyan-500' :
+                            'text-gold-primary'
+                          }`} />
                         </div>
 
                         <div className="flex justify-between items-start mb-2">
                           <div>
-                            <span className={`text-[7px] font-black uppercase tracking-widest mb-0.5 block ${isMirrorBias ? 'text-pink-500' : 'text-gold-primary'}`}>{bias.type}</span>
+                            <span className={`text-[7px] font-black uppercase tracking-widest mb-0.5 block ${
+                              isMirrorBias ? 'text-pink-500' : 
+                              isCamufladosBias ? 'text-cyan-500' :
+                              'text-gold-primary'
+                            }`}>{bias.type}</span>
                             <h3 className="text-sm font-black text-white tracking-tight leading-tight">{bias.value}</h3>
                           </div>
                           <div className="flex flex-col items-end">
@@ -114,7 +136,14 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                               {isMirrorBias && (
                                 <span className="px-1.5 py-0.5 bg-pink-500 rounded text-[6px] font-black text-white uppercase tracking-widest animate-pulse">Mirror</span>
                               )}
-                              <span className={`text-xs font-black ${isMirrorBias ? 'text-pink-500' : 'gold-text'}`}>{bias.confidence}%</span>
+                              {isCamufladosBias && (
+                                <span className="px-1.5 py-0.5 bg-cyan-500 rounded text-[6px] font-black text-white uppercase tracking-widest animate-pulse">Camuflado</span>
+                              )}
+                              <span className={`text-xs font-black ${
+                                isMirrorBias ? 'text-pink-500' : 
+                                isCamufladosBias ? 'text-cyan-500' :
+                                'gold-text'
+                              }`}>{bias.confidence}%</span>
                             </div>
                           </div>
                         </div>
@@ -125,7 +154,11 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                               <motion.div 
                                 initial={{ width: 0 }}
                                 animate={{ width: `${bias.confidence}%` }}
-                                className={`h-full ${isMirrorBias ? 'bg-pink-500' : 'bg-gold-primary'}`}
+                                className={`h-full ${
+                                  isMirrorBias ? 'bg-pink-500' : 
+                                  isCamufladosBias ? 'bg-cyan-500' :
+                                  'bg-gold-primary'
+                                }`}
                               />
                             </div>
                             
@@ -142,7 +175,11 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                               )}
                             </div>
                             <div className="mt-1.5 flex items-center gap-1">
-                              <span className={`text-[6px] font-black uppercase tracking-widest ${isMirrorBias ? 'text-pink-500' : 'text-gold-primary'}`}>info:</span>
+                              <span className={`text-[6px] font-black uppercase tracking-widest ${
+                                isMirrorBias ? 'text-pink-500' : 
+                                isCamufladosBias ? 'text-cyan-500' :
+                                'text-gold-primary'
+                              }`}>info:</span>
                               <span className="text-[7px] font-bold text-zinc-400 uppercase tracking-tight">
                                 {bias.type === 'Vácuo Recorrente' ? 'Atraso Terminal Detectado' : 
                                  bias.type === 'Padrão de Vácuo' ? 'Intervalo Histórico Repetido' :
@@ -151,6 +188,7 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                                  bias.type === 'Setor' ? 'Tendência de Queda em Setor' :
                                  bias.type === 'Terminal' ? 'Frequência de Final de Número' :
                                  bias.type === 'Sequência' ? 'Padrão de Repetição Visual' :
+                                 bias.type === 'Camuflados' ? 'Convergência por Soma de Dígitos' :
                                  'Análise de Tendência Ativa'}
                               </span>
                             </div>
@@ -160,7 +198,11 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                             <span className="text-[7px] font-black uppercase tracking-widest text-zinc-600">Zona de Impacto</span>
                             <button 
                               onClick={() => setActiveTab('SETORIAIS')}
-                              className={`px-2 py-1 border rounded-md text-[6px] font-black uppercase tracking-widest transition-all ${isMirrorBias ? 'bg-pink-500/10 border-pink-500/20 text-pink-500 hover:bg-pink-500 hover:text-white' : 'bg-gold-primary/10 border-gold-primary/20 text-gold-primary hover:bg-gold-primary hover:text-black'}`}
+                              className={`px-2 py-1 border rounded-md text-[6px] font-black uppercase tracking-widest transition-all ${
+                                isMirrorBias ? 'bg-pink-500/10 border-pink-500/20 text-pink-500 hover:bg-pink-500 hover:text-white' : 
+                                isCamufladosBias ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-500 hover:bg-cyan-500 hover:text-white' :
+                                'bg-gold-primary/10 border-gold-primary/20 text-gold-primary hover:bg-gold-primary hover:text-black'
+                              }`}
                             >
                               Ver no Cilindro
                             </button>

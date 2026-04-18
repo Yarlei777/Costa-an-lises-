@@ -95,7 +95,8 @@ export const getUserSession = async (uid: string) => {
     const docSnap = await getDoc(sessionRef);
     return docSnap.exists() ? (docSnap.data() as UserSession) : null;
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
+    // Log but don't re-throw here to prevent unhandled rejections in the auth listener
+    console.error('Firestore GET Error: ', error);
     return null;
   }
 };

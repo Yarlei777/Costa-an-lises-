@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import RouletteWheelVisual from './components/RouletteWheelVisual';
-
+import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from './components/ErrorBoundary';
 import { 
   History, 
@@ -78,6 +78,7 @@ import {
   SECTOR_PROBABILITIES,
   FAMILIAS_CFG,
   ESPELHOS_CFG,
+  CAMUFLADOS_NUMBERS,
   MIRROR_NUMBERS_LIST
 } from './constants';
 
@@ -141,6 +142,15 @@ const getSector = (n: number) => {
   if (SECTORS.orphelins.includes(n)) return 'ORPHELINS';
   return 'UNKNOWN';
 };
+
+const getSumOfDigits = (n: number): number => {
+  if (n < 10) return n;
+  let sum = n.toString().split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+  while (sum >= 10) {
+    sum = sum.toString().split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+  }
+  return sum;
+};
 import { Toaster, toast } from 'sonner';
 import { Stats, CustomAlertRule, AlertType } from './types';
 import { neuralEngine } from './services/neuralEngine';
@@ -155,9 +165,9 @@ const lazyRetry = (componentImport: () => Promise<any>) => {
     // Check if it's a chunk load error
     if (errorMessage.includes('Failed to fetch dynamically imported module') || 
         errorMessage.includes('Importing a module script failed')) {
-      // Force a page reload to get the latest version
-      window.location.reload();
-      return { default: () => null };
+      console.warn("Lazy load failed, not reloading automatically to prevent loop.", error);
+      // window.location.reload();
+      return { default: () => <div className="p-10 text-red-500 font-mono text-xs overflow-auto">Failed to load component: {errorMessage}</div> };
     }
     
     console.error("Lazy load error:", error);
@@ -174,8 +184,6 @@ const HistoricoTab = lazyRetry(() => import("./components/HistoricoTab"));
 const TerminaisTab = lazyRetry(() => import("./components/TerminaisTab"));
 const RadarTab = lazyRetry(() => import("./components/RadarTab"));
 const LegalModal = lazyRetry(() => import("./components/LegalModals"));
-const LoginScreen = lazyRetry(() => import("./components/LoginScreen"));
-
 // Loading fallback component
 const TabLoading = () => (
   <div className="flex flex-col items-center justify-center py-40 space-y-6" translate="no">
@@ -243,6 +251,8 @@ export default function App() {
   });
   const [ballisticMode, setBallisticMode] = useState(false);
   const [currentDropPoint, setCurrentDropPoint] = useState<number | null>(null);
+  const [entryStep, setEntryStep] = useState(0); // 0 = Waiting, 1 = One Hit, 2 = Ready
+  const [previousTargets, setPreviousTargets] = useState<number[]>([]);
 
   // --- AUTOMATIC WEIGHT BALANCING (BRAIN ADAPTATION) ---
   useEffect(() => {
@@ -372,27 +382,31 @@ export default function App() {
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      try {
-        setUser(currentUser);
-        if (currentUser) {
-          try {
-            const session = await getUserSession(currentUser.uid);
-            if (session) {
-              if (session.history) {
-                const validHistory = session.history.filter((n: any) => typeof n === 'number' && n >= 0 && n <= 36);
-                setHistory(validHistory);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // Use an async IIFE to handle the async logic within the listener
+      (async () => {
+        try {
+          setUser(currentUser);
+          if (currentUser) {
+            try {
+              const session = await getUserSession(currentUser.uid);
+              if (session) {
+                if (session.history) {
+                  const validHistory = session.history.filter((n: any) => typeof n === 'number' && n >= 0 && n <= 36);
+                  setHistory(validHistory);
+                }
+                if (session.customRules) setCustomRules(session.customRules);
               }
-              if (session.customRules) setCustomRules(session.customRules);
+            } catch (err) {
+              console.error("Error fetching session:", err);
             }
-          } catch (err) {
-            console.error("Error fetching session:", err);
           }
+          setLoading(false);
+        } catch (err) {
+          console.error("Error in auth state change logic:", err);
+          setLoading(false);
         }
-        setLoading(false);
-      } catch (err) {
-        console.error("Error in auth state change:", err);
-      }
+      })().catch(err => console.error("Unhandled error in auth IIFE:", err));
     }, (error) => {
       console.error("Auth state change error:", error);
       setLoading(false);
@@ -413,12 +427,16 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [history, user]);
 
-  // Train neural engine when history changes
+  // Train neural engine when history changes (Optimized)
   useEffect(() => {
-    if (history.length >= 20) {
-      neuralEngine.train(history).catch(err => console.error("Unhandled train error:", err));
+    if (history.length >= 25 && history.length % 5 === 0) {
+      // Pequeno delay para garantir que a UI atualizou antes de começar o treino pesado
+      const timer = setTimeout(() => {
+        neuralEngine.train(history).catch(err => console.error("Neural training error:", err));
+      }, 1500);
+      return () => clearTimeout(timer);
     }
-  }, [history]);
+  }, [history.length]);
 
   const addNumber = React.useCallback((num: number | number[]) => {
     // Validate input
@@ -434,6 +452,15 @@ export default function App() {
     }
 
     if (!validate(num)) return;
+
+    // --- ENTRY FILTER LOGIC ---
+    // Check if the landed number was in the targets of the PREVIOUS prediction
+    const isHit = previousTargets.includes(num);
+    if (isHit) {
+      setEntryStep(prev => Math.min(prev + 1, 3)); // Max 3 steps for stability
+    } else {
+      setEntryStep(0); // Reset on miss to ensure "Quebra de Win" handling
+    }
 
     // Simulate haptic feedback
     if (window.navigator.vibrate) {
@@ -467,9 +494,21 @@ export default function App() {
     setHistory(prev => [num, ...prev].slice(0, 500));
   }, [ballisticMode, currentDropPoint]);
 
+  const setDropPoint = React.useCallback((num: number) => {
+    if (num >= 0 && num <= 36) {
+      setCurrentDropPoint(num);
+      toast.info(`Ponto de soltura definido: ${num}`, {
+        description: 'A predição balística agora baseia-se neste ponto.',
+        icon: <Target className="w-4 h-4 text-emerald-500" />
+      });
+    }
+  }, []);
+
   const clearHistory = React.useCallback(() => {
     setHistory([]);
     setDismissedAlerts([]);
+    setEntryStep(0);
+    setPreviousTargets([]);
   }, []);
 
   const removeLast = React.useCallback(() => {
@@ -895,6 +934,29 @@ export default function App() {
       });
     }
 
+    // --- CAMADA EXTRA: ANÁLISE DE CAMUFLADOS (Soma de Dígitos) ---
+    if (history.length >= 2) {
+      const lastNums = history.slice(0, 3); // Analisa os últimos 3 para convergência
+      const camufladosInHistory = lastNums.filter(n => CAMUFLADOS_NUMBERS.includes(n));
+      
+      if (camufladosInHistory.length >= 2) {
+        const sums = camufladosInHistory.map(n => getSumOfDigits(n));
+        // Verifica se há somas iguais (convergência)
+        const commonSum = sums.find((s, i) => sums.indexOf(s) !== i);
+        
+        if (commonSum !== undefined) {
+          const targets = CAMUFLADOS_NUMBERS.filter(n => getSumOfDigits(n) === commonSum);
+          targets.forEach(n => numberScores[n] += 120 * engineWeights.bias);
+          
+          detectedBiases.push({
+            type: 'Camuflados',
+            value: `Soma ${commonSum} Detectada`,
+            confidence: 92
+          });
+        }
+      }
+    }
+
     // Verifica densidade no Setor Zero (Últimas 20 rodadas)
     const last20 = history.slice(0, 20);
     const contagemSetorZero = last20.filter(n => ESPELHOS_CFG.setorZero.includes(n % 10)).length;
@@ -1139,6 +1201,15 @@ export default function App() {
       color: ROULETTE_NUMBERS[i].color
     }));
 
+    // --- SYSTEM STATUS ---
+    const systemStatus = {
+      neural: history.length >= 25 ? 'ONLINE' : 'TRAINING',
+      markov: history.length >= 10 ? 'ONLINE' : 'COLLECTING',
+      bias: history.length >= 5 ? 'ONLINE' : 'COLLECTING',
+      sector: history.length >= 3 ? 'ONLINE' : 'COLLECTING',
+      ballistic: ballisticMode ? 'ACTIVE' : 'STANDBY'
+    };
+
     // --- CAMADA 12: HISTORICAL GAP PATTERN (INDIVIDUAL NUMBERS) ---
     for (let i = 0; i <= 36; i++) {
       const gaps = calculateGaps(history, [i]);
@@ -1262,6 +1333,95 @@ export default function App() {
 
     // --- CAMADA 15: CLUSTER ANALYSIS (VIZINHOS DE QUEDA) ---
     const recentHits = history.slice(0, 8);
+    
+    // --- CAMADA 15.5: SECTOR VELOCITY (MOMENTUM DO CILINDRO) ---
+    if (history.length >= 4) {
+      const sectorIndices = history.slice(0, 4).map(n => WHEEL_ORDER.indexOf(n));
+      const velocities: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        let diff = sectorIndices[i] - sectorIndices[i+1];
+        if (diff > 18) diff -= 37;
+        if (diff < -18) diff += 37;
+        velocities.push(diff);
+      }
+      
+      const avgVelocity = velocities.reduce((a, b) => a + b, 0) / velocities.length;
+      const velocityConsistency = velocities.every(v => Math.sign(v) === Math.sign(velocities[0]));
+      
+      if (velocityConsistency && Math.abs(avgVelocity) > 2) {
+        const lastIdx = sectorIndices[0];
+        const predictedIdx = (lastIdx + Math.round(avgVelocity) + 37) % 37;
+        const predictedNum = WHEEL_ORDER[predictedIdx];
+        
+        numberScores[predictedNum] += 120 * engineWeights.bias;
+        // Vizinhos da velocidade
+        for (let offset = -2; offset <= 2; offset++) {
+          const idx = (predictedIdx + offset + 37) % 37;
+          numberScores[WHEEL_ORDER[idx]] += 60 * engineWeights.bias;
+        }
+
+        detectedBiases.push({
+          type: 'Velocidade',
+          value: `Inércia ${avgVelocity > 0 ? 'Horária' : 'Anti-horária'} (+${Math.round(avgVelocity)} casas)`,
+          confidence: 88
+        });
+      }
+    }
+
+    // --- CAMADA 15.7: SEQUENTIAL PATTERN RECOGNITION (RECURRÊNCIA DE SEQUÊNCIA) ---
+    if (history.length >= 10) {
+      const lastTwo = history.slice(0, 2);
+      const sequenceFollowers: Record<number, number> = {};
+      
+      for (let i = 2; i < history.length - 1; i++) {
+        if (history[i] === lastTwo[0] && history[i+1] === lastTwo[1]) {
+          const follower = history[i-1];
+          sequenceFollowers[follower] = (sequenceFollowers[follower] || 0) + 1;
+        }
+      }
+      
+      const topFollowers = Object.entries(sequenceFollowers).sort((a, b) => b[1] - a[1]);
+      if (topFollowers.length > 0) {
+        const [num, count] = topFollowers[0];
+        const confidence = Math.min(count * 35, 95);
+        numberScores[Number(num)] += 150 * (confidence / 100) * engineWeights.markov;
+        
+        detectedBiases.push({
+          type: 'Padrão Sequencial',
+          value: `Sequência [${lastTwo[1]}, ${lastTwo[0]}] -> ${num}`,
+          confidence
+        });
+      }
+    }
+
+    // --- CAMADA 15.9: MIRROR CONVERGENCE (SIMETRIA NUMÉRICA) ---
+    if (history.length >= 3) {
+      const lastNum = history[0];
+      const mirrors: number[] = [];
+      
+      // Check for digit mirrors (e.g., 12 -> 21)
+      const lastStr = lastNum.toString().padStart(2, '0');
+      const reversedStr = lastStr.split('').reverse().join('');
+      const reversedNum = parseInt(reversedStr);
+      if (reversedNum <= 36 && reversedNum !== lastNum) mirrors.push(reversedNum);
+      
+      // Check for terminal mirrors (e.g., 1 -> 10, 2 -> 20)
+      if (lastNum > 0 && lastNum < 4) mirrors.push(lastNum * 10);
+      if (lastNum >= 10 && lastNum % 10 === 0) mirrors.push(lastNum / 10);
+      
+      mirrors.forEach(m => {
+        numberScores[m] += 80 * engineWeights.bias;
+        // Vizinhos do espelho
+        const mIdx = WHEEL_ORDER.indexOf(m);
+        if (mIdx !== -1) {
+          for (let offset = -1; offset <= 1; offset++) {
+            const idx = (mIdx + offset + 37) % 37;
+            numberScores[WHEEL_ORDER[idx]] += 40 * engineWeights.bias;
+          }
+        }
+      });
+    }
+
     const sectorHits: Record<string, number> = { VOISINS: 0, TIERS: 0, ORPHELINS: 0, JEUZERO: 0 };
     
     recentHits.forEach(num => {
@@ -1698,15 +1858,16 @@ export default function App() {
 
       const currentSeqWithNeighbors = currentSeq.map(getNeighbors);
 
-      // Procurar no passado (ignorando os números mais recentes)
-      for (let i = seqLen; i < history.length - 1; i++) {
+      // Otimização: Limitar a busca aos últimos 200 números para manter a fluidez
+      const scanDepth = Math.min(history.length - 1, 200);
+      for (let i = seqLen; i < scanDepth; i++) {
         const pastSeq = history.slice(i, i + seqLen);
         const nextInPast = history[i - 1]; // O número que veio DEPOIS da sequência no passado
         
         if (nextInPast === undefined) continue;
 
-        // 1. Match Exato: 12, 20 -> ? (Se no passado 12, 20 chamou 4)
-        const isExactMatch = pastSeq.every((num, idx) => num === currentSeq[idx]);
+        // 1. Match Exato
+        const isExactMatch = pastSeq[0] === currentSeq[0] && pastSeq[1] === currentSeq[1];
         
         if (isExactMatch) {
           numberScores[nextInPast] += 100 * engineWeights.bias;
@@ -1720,8 +1881,9 @@ export default function App() {
           continue;
         }
 
-        // 2. Match por Vizinhança: (35|12|28), (14|20|1) -> ?
-        const isNeighborMatch = pastSeq.every((num, idx) => currentSeqWithNeighbors[idx].includes(num));
+        // 2. Match por Vizinhança
+        const isNeighborMatch = currentSeqWithNeighbors[0].includes(pastSeq[0]) && 
+                               currentSeqWithNeighbors[1].includes(pastSeq[1]);
         
         if (isNeighborMatch) {
           const targets = getNeighbors(nextInPast);
@@ -1759,6 +1921,94 @@ export default function App() {
       }
     });
 
+    // --- CAMADA 27: SECTOR TRANSITION MATRIX ---
+    if (history.length >= 10) {
+      const sectorTransitions: Record<string, Record<string, number>> = {};
+      // Otimização: Limitar profundidade da matriz de transição
+      const matrixDepth = Math.min(history.length - 1, 150);
+      for (let i = 0; i < matrixDepth; i++) {
+        const currentS = getSector(history[i+1]);
+        const nextS = getSector(history[i]);
+        if (!sectorTransitions[currentS]) sectorTransitions[currentS] = {};
+        sectorTransitions[currentS][nextS] = (sectorTransitions[currentS][nextS] || 0) + 1;
+      }
+      
+      const currentSector = getSector(history[0]);
+      const possibleNextSectors = sectorTransitions[currentSector];
+      if (possibleNextSectors) {
+        Object.entries(possibleNextSectors).forEach(([s, count]) => {
+          const weight = (count / matrixDepth) * 150;
+          const nums = SECTORS[s.toLowerCase() as keyof typeof SECTORS];
+          if (nums) {
+            nums.forEach(n => numberScores[n] += weight * engineWeights.sector);
+          }
+        });
+      }
+    }
+
+    // --- CAMADA 28: CROSS-SECTOR TERMINAL BREAK (ANÁLISE DE QUEBRA) ---
+    if (history.length >= 5) {
+      const strongestTerminal = scores.indexOf(Math.max(...scores));
+      
+      if (scores[strongestTerminal] > 100) {
+        // Otimização: Evitar Array.from em cada render
+        const terminalNumbers = [strongestTerminal, strongestTerminal + 10, strongestTerminal + 20, strongestTerminal + 30].filter(n => n <= 36);
+        
+        const sectorCounts: Record<string, number> = {};
+        terminalNumbers.forEach(n => {
+          const s = getSector(n);
+          sectorCounts[s] = (sectorCounts[s] || 0) + 1;
+        });
+        const dominantSectorForTerminal = Object.entries(sectorCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+        const isChoppy = detectedBiases.some(b => b.type === 'Alternância' && b.value.includes('Choppy'));
+        if (chaosIndex > 0.6 || isChoppy) {
+          const breakSectors = new Set<string>();
+          terminalNumbers.forEach(n => {
+            const s = getSector(n);
+            if (s !== dominantSectorForTerminal) {
+              numberScores[n] += 80 * engineWeights.bias;
+              if (s !== 'UNKNOWN') breakSectors.add(s);
+            }
+          });
+
+          const breakSectorsList = Array.from(breakSectors).join(' / ');
+          detectedBiases.push({
+            type: 'Quebra de Setor',
+            value: `Terminal ${strongestTerminal} ➔ Quebra p/ ${breakSectorsList || 'Outros'}`,
+            confidence: Math.round(chaosIndex * 100)
+          });
+        }
+      }
+    }
+
+    // --- CAMADA 29: NEURAL-MARKOV CONVERGENCE BOOST ---
+    const neuralTopNum = neuralProbs.indexOf(Math.max(...neuralProbs));
+    if (numberScores[neuralTopNum] > 200) { // Se outros motores também gostam deste número
+      numberScores[neuralTopNum] *= 1.5; // 50% de bônus para convergência total
+    }
+
+    // --- CAMADA 30: SUPER CONVERGENCE (CROSS-LAYER INTERSECTION) ---
+    // Encontra números que aparecem em múltiplas camadas de análise
+    for (let i = 0; i <= 36; i++) {
+      let layerHits = 0;
+      if (numberScores[i] > 100) layerHits++;
+      if (contextTargets.includes(i)) layerHits++;
+      if (neuralProbs[i] > 0.1) layerHits++;
+      
+      const t = i % 10;
+      if (scores[t] > 100) layerHits++;
+
+      if (layerHits >= 3) {
+        numberScores[i] += 200 * (layerHits / 3) * engineWeights.bias;
+        detectedBiases.push({
+          type: 'Super Convergência',
+          value: `Número ${i}: Sincronia de ${layerHits} camadas detectada.`,
+          confidence: Math.min(85 + (layerHits * 4), 99)
+        });
+      }
+    }
+
     const sortedNumbers = numberScores
       .map((score, num) => ({ num, score }))
       .sort((a, b) => b.score - a.score);
@@ -1777,18 +2027,43 @@ export default function App() {
     const mainScore = top8[0]?.score ?? 0;
     
     // Sniper is true if main target has high score AND matches at least 2 other high-confidence biases
-    const sniperBiases = detectedBiases.filter(b => 
-      (b.type === 'Padrão de Vácuo' && b.value.includes(`Número ${mainTarget}`)) ||
-      (b.type === 'Vácuo Recorrente' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-      (b.type === 'Assinatura' && WHEEL_ORDER.indexOf(mainTarget) >= WHEEL_ORDER.indexOf(history[0]) - 2 && WHEEL_ORDER.indexOf(mainTarget) <= WHEEL_ORDER.indexOf(history[0]) + 2) ||
-      (b.type === 'Desvio Padrão' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-      (MIRROR_NUMBERS_LIST.includes(mainTarget) && b.type === 'Espelho Direto') ||
-      (b.type === 'Terminal Repetido' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-      (b.type === 'Terminal Triplo' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-      (b.type === 'Sequência Histórica' && b.value.includes(`T${mainTarget % 10}`)) ||
-      (b.type === 'Lei do Terceiro' && b.value.includes(`${mainTarget}`)) ||
-      (b.type === 'Longo Prazo' && b.value.includes(`${mainTarget}`))
-    );
+    const sniperBiases = detectedBiases.filter(b => {
+      const mainIdx = WHEEL_ORDER.indexOf(mainTarget);
+      const lastIdx = history.length > 0 ? WHEEL_ORDER.indexOf(history[0]) : -1;
+      
+      // Check if mainTarget is mentioned or related to the bias
+      const isMentioned = b.value.includes(`${mainTarget}`) || b.value.includes(`Terminal ${mainTarget % 10}`);
+      
+      if (b.type === 'Assinatura') {
+        // For Assinatura, check if mainTarget is in the predicted zone
+        if (b.value.includes('Salto')) {
+          const jumpMatch = b.value.match(/Salto ~?(-?\d+)/);
+          if (jumpMatch && lastIdx !== -1) {
+            const jump = parseInt(jumpMatch[1]);
+            const predictedIdx = (lastIdx + jump + 37) % 37;
+            const dist = Math.abs(mainIdx - predictedIdx);
+            return dist <= 2 || dist >= 35;
+          }
+        }
+        return isMentioned;
+      }
+      
+      if (b.type === 'Balística Ativa') {
+        return isMentioned;
+      }
+
+      return isMentioned || 
+             (MIRROR_NUMBERS_LIST.includes(mainTarget) && b.type === 'Espelho Direto') ||
+             (b.type === 'Padrão de Vácuo' && b.value.includes(`Número ${mainTarget}`)) ||
+             (b.type === 'Vácuo Recorrente' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
+             (b.type === 'Desvio Padrão' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
+             (b.type === 'Terminal Repetido' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
+             (b.type === 'Terminal Triplo' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
+             (b.type === 'Sequência Histórica' && b.value.includes(`T${mainTarget % 10}`)) ||
+             (b.type === 'Lei do Terceiro' && b.value.includes(`${mainTarget}`)) ||
+             (b.type === 'Quebra de Setor' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
+             (b.type === 'Longo Prazo' && b.value.includes(`${mainTarget}`));
+    });
     
     const isSniper = (mainScore > 550 && sniperBiases.length >= 2) || (mainScore > 800);
     const betPercentage = isSniper ? Math.min(Math.round((mainScore / 800) * 100), 99) : 0;
@@ -1890,10 +2165,20 @@ export default function App() {
         isConcentrated,
         mainTarget,
         isSniper,
-        betPercentage
-      } 
+        betPercentage,
+        neuralTop: neuralProbs.map((p, i) => ({ num: i, prob: p })).sort((a, b) => b.prob - a.prob).slice(0, 5),
+        entrySignal: entryStep >= 2 ? 'PLAY' : entryStep === 1 ? 'WAIT_CONFIRM' : 'OBSERVING'
+      },
+      systemStatus
     };
-  }, [history, engineWeights]);
+  }, [history, engineWeights, ballisticMode, entryStep]);
+
+  // Sync previous targets for next hit evaluation
+  useEffect(() => {
+    if (stats?.prediction?.targets) {
+      setPreviousTargets(stats.prediction.targets);
+    }
+  }, [stats?.prediction?.targets]);
 
   const { highlightedNumbers, allCylinderTargets, vacuumNumbers, targetZone, isOmega } = useMemo(() => {
     if (!stats) return { highlightedNumbers: [], allCylinderTargets: [], vacuumNumbers: [], targetZone: "", isOmega: false };
@@ -2159,9 +2444,7 @@ export default function App() {
   if (!isAppAuthorized) {
     return (
       <ErrorBoundary>
-        <Suspense fallback={<TabLoading />}>
           <LoginScreen onLogin={() => setIsAppAuthorized(true)} />
-        </Suspense>
       </ErrorBoundary>
     );
   }
@@ -2205,8 +2488,8 @@ export default function App() {
           initial={{ width: 0 }}
           animate={{ 
             width: `${stats?.prediction?.confidence || 0}%`,
-            background: (stats?.prediction?.confidence || 0) > 70 ? '#22c55e' : '#222',
-            boxShadow: (stats?.prediction?.confidence || 0) > 85 ? '0 0 30px rgba(34, 197, 94, 0.6)' : 'none'
+            background: '#22c55e',
+            boxShadow: (stats?.prediction?.confidence || 0) > 85 ? '0 0 30px rgba(34, 197, 94, 0.6)' : '0 0 10px rgba(34, 197, 94, 0.2)'
           }}
           transition={{ duration: 0.8, ease: "easeInOut" }}
         />
@@ -2423,6 +2706,8 @@ export default function App() {
                   setBallisticMode(!ballisticMode);
                   setCurrentDropPoint(null);
                 }}
+                onSetDropPoint={setDropPoint}
+                entryStep={entryStep}
               />
             </motion.div>
           </Suspense>

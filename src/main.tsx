@@ -21,6 +21,13 @@ window.addEventListener('unhandledrejection', (event) => {
   const reason = event.reason;
   const message = reason instanceof Error ? reason.message : String(reason);
   
+  // Ignore benign errors
+  if (message.includes('Failed to fetch dynamically imported module') || 
+      message.includes('Importing a module script failed') ||
+      message.includes('The user aborted a request')) {
+    return;
+  }
+  
   console.error('Unhandled promise rejection:', message, reason);
 });
 
