@@ -1,10 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Image as ImageIcon, Upload, Loader2, CheckCircle2, AlertCircle, X, Hash } from 'lucide-react';
-import { GoogleGenAI, Type } from "@google/genai";
 import { toast } from 'sonner';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 interface HistoryScannerProps {
   onNumbersDetected: (nums: number[]) => void;
@@ -72,37 +69,25 @@ const HistoryScanner: React.FC<HistoryScannerProps> = ({ onNumbersDetected }) =>
       }
       ctx.putImageData(imageData, 0, 0);
 
-      // Convert canvas to base64 for Gemini
+      // Convert canvas to base64 for Proxy
       const base64Data = canvas.toDataURL('image/png').split(',')[1];
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType: "image/png",
-                data: base64Data,
-              },
-            },
-            {
-              text: "Extract all roulette numbers (0-36) from this history screenshot. Return ONLY a JSON array of integers in the order they appear (top-left to bottom-right).",
-            },
-          ],
-        },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: { type: Type.INTEGER },
-          },
-        },
+      const res = await fetch("/api/analyze-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: base64Data,
+          prompt: "Extract all roulette numbers (0-36) from this history screenshot. Return ONLY a JSON array of integers in the order they appear (top-left to bottom-right)."
+        })
       });
 
-      if (!response.text) throw new Error("No response from AI");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to process image");
+      }
       
-      const nums = JSON.parse(response.text) as number[];
-      const validNums = nums.filter(n => n >= 0 && n <= 36);
+      const { result: nums } = await res.json();
+      const validNums = (nums as number[]).filter(n => n >= 0 && n <= 36);
       
       if (validNums.length > 0) {
         setDetectedNums(validNums);

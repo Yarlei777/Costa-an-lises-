@@ -2484,11 +2484,57 @@ export default function App() {
       <header className="glass-card sticky top-0 z-50 border-x-0 border-t-0">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 gold-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-gold-primary/30 border border-white/20">
-              <ShieldCheck className="w-7 h-7 text-black" />
+            <div className="w-12 h-12 gold-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-gold-primary/30 border border-white/20 relative overflow-hidden group">
+              <svg viewBox="0 0 100 100" className="w-8 h-8 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                {/* Outer Ring */}
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#222" strokeWidth="8" />
+                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="1" className="text-white/20" />
+                
+                {/* Roulette Slots */}
+                {Array.from({ length: 37 }).map((_, i) => (
+                  <rect
+                    key={i}
+                    x="48"
+                    y="5"
+                    width="4"
+                    height="12"
+                    fill={i === 0 ? "#16a34a" : i % 2 === 0 ? "#000000" : "#dc2626"}
+                    transform={`rotate(${(i * 360) / 37} 50 50)`}
+                  />
+                ))}
+                
+                {/* Golden separator lines */}
+                {Array.from({ length: 37 }).map((_, i) => (
+                  <line
+                    key={`line-${i}`}
+                    x1="50" y1="5" x2="50" y2="17"
+                    stroke="#BF953F"
+                    strokeWidth="0.5"
+                    transform={`rotate(${(i * 360) / 37 + 180/37} 50 50)`}
+                  />
+                ))}
+
+                {/* Inner Golden Hub */}
+                <circle cx="50" cy="50" r="25" fill="#BF953F" />
+                <circle cx="50" cy="50" r="22" fill="url(#gold-radial)" />
+                
+                {/* Hub Detail */}
+                <path d="M50 35 L50 65 M35 50 L65 50" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
+                <circle cx="50" cy="50" r="5" fill="#000" />
+                
+                <defs>
+                  <radialGradient id="gold-radial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+                    <stop offset="0%" stopColor="#FCF6BA" />
+                    <stop offset="50%" stopColor="#BF953F" />
+                    <stop offset="100%" stopColor="#8A6E2F" />
+                  </radialGradient>
+                </defs>
+              </svg>
+              {/* Subtle shining light effect */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent rotate-45 transform -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tighter uppercase italic gold-text">Costa <span className="text-white">analises</span></h1>
+              <h1 className="text-2xl font-black tracking-tighter uppercase italic gold-text">Exu <span className="text-white">do ouro</span></h1>
               <p className="text-[10px] uppercase tracking-[0.4em] text-zinc-600 font-black">Terminal de Elite</p>
             </div>
           </div>
@@ -2752,7 +2798,7 @@ export default function App() {
           <div className="flex flex-col items-center gap-4">
             <div className="flex items-center gap-2 opacity-30">
               <ShieldCheck className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Costa Security Protocol</span>
+              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Exu do Ouro Security Protocol</span>
             </div>
             <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] font-bold">
               Algoritmo de Alta Frequência • Licença de Uso Profissional

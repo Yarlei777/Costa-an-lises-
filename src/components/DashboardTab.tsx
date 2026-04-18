@@ -103,62 +103,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
     }
   };
 
-  const allCylinderTargets = React.useMemo(() => {
-    const targetsMap = new Map<number, { num: number; confidence: number; isMirrorOnly: boolean }>();
-    
-    // First, add all highlighted numbers with their original confidence
-    highlightedNumbers.forEach(num => {
-      const confObj = stats?.prediction?.targetsWithConfidence?.find(t => t.num === num);
-      targetsMap.set(num, {
-        num,
-        confidence: confObj ? confObj.confidence : 85, // Default high confidence if not found
-        isMirrorOnly: false
-      });
-    });
-    
-    // Then, add mirrors for the highlighted numbers
-    highlightedNumbers.forEach(num => {
-      [...ESPELHOS_CFG.digitMirrorPairs, ...ESPELHOS_CFG.pairs].forEach(pair => {
-        let mirrorNum: number | null = null;
-        if (pair[0] === num) mirrorNum = pair[1];
-        else if (pair[1] === num) mirrorNum = pair[0];
-        
-        if (mirrorNum !== null && !targetsMap.has(mirrorNum)) {
-          const originalConf = targetsMap.get(num)?.confidence || 85;
-          targetsMap.set(mirrorNum, {
-            num: mirrorNum,
-            confidence: Math.max(originalConf - 5, 50), // Slightly lower confidence for mirrors
-            isMirrorOnly: true
-          });
-        }
-      });
-    });
-    
-    // Add vacuum numbers
-    vacuumNumbers.forEach(num => {
-      if (!targetsMap.has(num)) {
-        targetsMap.set(num, {
-          num,
-          confidence: 70, // Default confidence for vacuum numbers
-          isMirrorOnly: false
-        });
-      }
-    });
-
-    // Add context targets
-    contextTargets.forEach(num => {
-      if (!targetsMap.has(num)) {
-        targetsMap.set(num, {
-          num,
-          confidence: 65, // Default confidence for context targets
-          isMirrorOnly: false
-        });
-      }
-    });
-    
-    return Array.from(targetsMap.values()).sort((a, b) => b.confidence - a.confidence);
-  }, [highlightedNumbers, stats?.prediction?.targetsWithConfidence, vacuumNumbers, contextTargets]);
-
   // Performance optimization for animations
   const containerStyle = React.useMemo(() => ({
     contain: 'layout style paint' as const,
@@ -217,19 +161,15 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
           </div>
           
           <div className="flex flex-col items-center">
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-black uppercase tracking-[0.8em] gold-text">Exu do Ouro</h1>
-              {history.length < 25 && (
-                <div className="group relative flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full animate-pulse cursor-help">
-                  <div className="w-1 h-1 rounded-full bg-blue-500" />
-                  <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">Germinação</span>
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-black/90 border border-blue-500/30 rounded-lg text-[8px] text-blue-200 font-bold leading-tight opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
-                    O sistema está em fase de coleta de dados. A precisão máxima será atingida após 25 números inseridos.
-                  </div>
+            {history.length < 25 && (
+              <div className="group relative flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full animate-pulse cursor-help">
+                <div className="w-1 h-1 rounded-full bg-blue-500" />
+                <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">Germinação</span>
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-black/90 border border-blue-500/30 rounded-lg text-[8px] text-blue-200 font-bold leading-tight opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
+                  O sistema está em fase de coleta de dados. A precisão máxima será atingida após 25 números inseridos.
                 </div>
-              )}
-            </div>
-            <div className="h-[1px] w-32 bg-gradient-to-r from-transparent via-gold-primary/50 to-transparent mt-1" />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -246,32 +186,16 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       </div>
       {/* Layout de 3 Colunas para Desktop (Análise ao redor do Navegador) */}
       <div className="lg:col-span-3 space-y-6 order-2 lg:order-1">
-        {/* Cérebro Central */}
+        {/* Cérebro Central - Removido conforme solicitação, já existe aba específica */}
         <section className="glass-card rounded-[2rem] p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-gold-primary" />
-              <span className="text-[9px] uppercase tracking-[0.3em] text-zinc-500 font-black">Motores Neurais</span>
+          <div className="flex flex-col items-center gap-4 py-4 text-center">
+            <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20">
+              <Zap className="w-6 h-6 text-emerald-500" />
             </div>
-          </div>
-          <div className="space-y-2">
-            {[
-              { label: 'Neural', weight: engineWeights.neural },
-              { label: 'Markov', weight: engineWeights.markov },
-              { label: 'Setor', weight: engineWeights.sector },
-              { label: 'Viés', weight: engineWeights.bias },
-              { label: 'Curto', weight: engineWeights.shortTerm }
-            ].map((item, i) => (
-              <div key={i} className="p-2 bg-white/5 rounded-xl border border-white/5 flex flex-col gap-0.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-[7px] uppercase tracking-widest text-zinc-600 font-bold">{item.label}</span>
-                  <span className="text-[8px] font-black gold-text">x{item.weight.toFixed(2)}</span>
-                </div>
-                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-gold-primary" style={{ width: `${(item.weight / 2) * 100}%` }} />
-                </div>
-              </div>
-            ))}
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Sistema Ativo</p>
+              <p className="text-[8px] text-zinc-500 font-bold mt-1">Motores integrados em tempo real</p>
+            </div>
           </div>
         </section>
 
@@ -457,10 +381,28 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                   sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-storage-access-by-user-activation"
                   referrerPolicy="no-referrer"
                 />
-                <div className="absolute top-6 right-6 flex space-x-3 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setIsMaximized(!isMaximized)} className="bg-zinc-900/90 text-white p-3 rounded-xl border border-white/10"><Maximize2 className="w-5 h-5" /></button>
-                  <button onClick={handleRefreshIframe} className="bg-zinc-900/90 text-white p-3 rounded-xl border border-white/10"><RotateCcw className="w-5 h-5" /></button>
-                  <button onClick={handleClearBrowser} className="bg-red-500/20 text-red-500 p-3 rounded-xl border border-red-500/30"><X className="w-5 h-5" /></button>
+                <div className="absolute top-3 left-3 flex space-x-1.5 z-20">
+                  <button 
+                    onClick={() => setIsMaximized(!isMaximized)} 
+                    className="bg-black/40 backdrop-blur-sm text-white/40 hover:text-white p-1 rounded-md border border-white/5 transition-all hover:scale-105"
+                    title="Maximizar"
+                  >
+                    {isMaximized ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                  </button>
+                  <button 
+                    onClick={handleRefreshIframe} 
+                    className="bg-black/40 backdrop-blur-sm text-white/40 hover:text-white p-1 rounded-md border border-white/5 transition-all hover:scale-105"
+                    title="Atualizar Página"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                  <button 
+                    onClick={handleClearBrowser} 
+                    className="bg-red-500/5 backdrop-blur-sm text-red-500/40 hover:text-red-500 p-1 rounded-md border border-red-500/10 transition-all hover:scale-105"
+                    title="Fechar Navegador"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ) : (
@@ -490,39 +432,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
 
       {/* Right Column: Targets & Wheel (Desktop Right) */}
       <div className="lg:col-span-3 space-y-6 order-3">
-        {/* Números Alvos */}
-        <section className="glass-card rounded-[2rem] p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-gold-primary" />
-              <span className="text-[9px] uppercase tracking-[0.3em] text-zinc-500 font-black">Alvos Prioritários</span>
-            </div>
-          </div>
-          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar" style={{ contain: 'content', willChange: 'scroll-position' }}>
-            {allCylinderTargets.slice(0, 12).map((target, idx) => {
-              const num = target.num;
-              const score = target.confidence;
-              const isMirror = target.isMirrorOnly || MIRROR_NUMBERS_LIST.includes(num);
-              return (
-                <div key={num} className={`p-3 bg-white/5 rounded-xl border flex items-center gap-3 transition-all ${isOmega ? 'border-emerald-500/30' : isMirror ? 'border-pink-500/30' : 'border-gold-primary/10'}`}>
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black border ${COLORS[ROULETTE_NUMBERS[num].color]} ${isOmega ? 'border-emerald-500/50' : 'border-gold-primary/30'}`}>
-                    {num}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[7px] font-black uppercase text-zinc-500">{isMirror ? 'Espelho' : 'Assertividade'}</span>
-                      <span className={`text-[10px] font-black ${isOmega ? 'text-emerald-500' : 'gold-text'}`}>{score}%</span>
-                    </div>
-                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                      <div className={`h-full ${isOmega ? 'bg-emerald-500' : 'bg-gold-primary'}`} style={{ width: `${score}%` }} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
         {/* Últimos Números */}
         <section className="glass-card rounded-[2rem] p-6">
           <div className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mb-4 flex items-center gap-2">
