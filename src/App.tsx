@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import RouletteWheelVisual from './components/RouletteWheelVisual';
-import LoginScreen from "./components/LoginScreen";
+
 import ErrorBoundary from './components/ErrorBoundary';
 import { 
   History, 
@@ -82,75 +82,9 @@ import {
   MIRROR_NUMBERS_LIST
 } from './constants';
 
-// Utility functions moved outside to prevent re-creation and improve performance
-const calculateSequence = <T extends string>(history: number[], check: (n: number) => boolean, typeA: T, typeB: T) => {
-  if (history.length === 0) return { current: 0, max: 0, type: 'none' as const };
-  let current = 0;
-  let max = 0;
-  
-  const first = history[0];
-  const firstIsA = check(first);
-  const currentType = firstIsA ? typeA : typeB;
-  
-  for (let i = 0; i < history.length; i++) {
-    if (check(history[i]) === firstIsA) {
-      current++;
-    } else {
-      break;
-    }
-  }
 
-  let streak = 0;
-  let lastWasA = check(history[0]);
-  for (let i = 0; i < history.length; i++) {
-    const isA = check(history[i]);
-    if (isA === lastWasA) {
-      streak++;
-    } else {
-      max = Math.max(max, streak);
-      streak = 1;
-      lastWasA = isA;
-    }
-  }
-  max = Math.max(max, streak);
-
-  return { current, max, type: currentType };
-};
-
-const calculateGaps = (history: number[], targetNums: number[]) => {
-  const gaps: number[] = [];
-  let currentGap = 0;
-  let foundFirst = false;
-  
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (targetNums.includes(history[i])) {
-      if (foundFirst) {
-        gaps.push(currentGap);
-      }
-      currentGap = 0;
-      foundFirst = true;
-    } else if (foundFirst) {
-      currentGap++;
-    }
-  }
-  return gaps;
-};
-
-const getSector = (n: number) => {
-  if (SECTORS.voisins.includes(n)) return 'VOISINS';
-  if (SECTORS.tiers.includes(n)) return 'TIERS';
-  if (SECTORS.orphelins.includes(n)) return 'ORPHELINS';
-  return 'UNKNOWN';
-};
-
-const getSumOfDigits = (n: number): number => {
-  if (n < 10) return n;
-  let sum = n.toString().split('').reduce((acc, digit) => acc + parseInt(digit), 0);
-  while (sum >= 10) {
-    sum = sum.toString().split('').reduce((acc, digit) => acc + parseInt(digit), 0);
-  }
-  return sum;
-};
+import { useRouletteStats } from './hooks/useRouletteStats';
+import { calculateSequence, calculateGaps, getSector, getSumOfDigits } from './utils/rouletteUtils';
 import { Toaster, toast } from 'sonner';
 import { Stats, CustomAlertRule, AlertType } from './types';
 import { neuralEngine } from './services/neuralEngine';
@@ -165,9 +99,9 @@ const lazyRetry = (componentImport: () => Promise<any>) => {
     // Check if it's a chunk load error
     if (errorMessage.includes('Failed to fetch dynamically imported module') || 
         errorMessage.includes('Importing a module script failed')) {
-      console.warn("Lazy load failed, not reloading automatically to prevent loop.", error);
-      // window.location.reload();
-      return { default: () => <div className="p-10 text-red-500 font-mono text-xs overflow-auto">Failed to load component: {errorMessage}</div> };
+      // Force a page reload to get the latest version
+      window.location.reload();
+      return { default: () => null };
     }
     
     console.error("Lazy load error:", error);
@@ -184,6 +118,8 @@ const HistoricoTab = lazyRetry(() => import("./components/HistoricoTab"));
 const TerminaisTab = lazyRetry(() => import("./components/TerminaisTab"));
 const RadarTab = lazyRetry(() => import("./components/RadarTab"));
 const LegalModal = lazyRetry(() => import("./components/LegalModals"));
+const LoginScreen = lazyRetry(() => import("./components/LoginScreen"));
+
 // Loading fallback component
 const TabLoading = () => (
   <div className="flex flex-col items-center justify-center py-40 space-y-6" translate="no">
@@ -251,8 +187,20 @@ export default function App() {
   });
   const [ballisticMode, setBallisticMode] = useState(false);
   const [currentDropPoint, setCurrentDropPoint] = useState<number | null>(null);
-  const [entryStep, setEntryStep] = useState(0); // 0 = Waiting, 1 = One Hit, 2 = Ready
-  const [previousTargets, setPreviousTargets] = useState<number[]>([]);
+  const [neuralProbs, setNeuralProbs] = useState<number[]>(new Array(37).fill(0));
+
+  // --- NEURAL PREDICTION UPDATER ---
+  useEffect(() => {
+    if (history.length >= 10) {
+      neuralEngine.predict(history).then(probs => {
+        if (Array.isArray(probs)) {
+          setNeuralProbs(probs);
+        }
+      }).catch(err => console.error("Neural prediction error:", err));
+    } else {
+      setNeuralProbs(new Array(37).fill(0));
+    }
+  }, [history.length]);
 
   // --- AUTOMATIC WEIGHT BALANCING (BRAIN ADAPTATION) ---
   useEffect(() => {
@@ -273,79 +221,99 @@ export default function App() {
     });
     const maxSectorCount = Math.max(...Object.values(sectorCounts));
 
-    // Evaluate Neural Engine and Markov if history is long enough
-    let neuralHit = false;
-    let markovHit = false;
-
     if (history.length >= 20) {
       const lastNum = history[0];
       const prevHistory = history.slice(1, 101); // Limit to last 100 for evaluation
 
       // Evaluate Neural Engine
-      const neuralProbs = neuralEngine.predict(prevHistory);
-      neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
-
-      // Evaluate Markov
-      const prevLastNum = prevHistory[0];
-      const transitions: Record<number, number> = {};
-      const transitionHistory = prevHistory.slice(0, 50);
-      for (let i = 0; i < transitionHistory.length - 1; i++) {
-        if (transitionHistory[i+1] === prevLastNum) {
-          const next = transitionHistory[i];
-          transitions[next] = (transitions[next] || 0) + 1;
+      neuralEngine.predict(prevHistory).then(neuralProbs => {
+        const neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
+        
+        // Evaluate Markov
+        const prevLastNum = prevHistory[0];
+        const transitions: Record<number, number> = {};
+        const transitionHistory = prevHistory.slice(0, 50);
+        for (let i = 0; i < transitionHistory.length - 1; i++) {
+          if (transitionHistory[i+1] === prevLastNum) {
+            const next = transitionHistory[i];
+            transitions[next] = (transitions[next] || 0) + 1;
+          }
         }
-      }
-      const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
-      if (topMarkov && Number(topMarkov[0]) === lastNum) markovHit = true;
+        const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
+        const markovHit = topMarkov && Number(topMarkov[0]) === lastNum;
+
+        // Adjust weights based on table behavior
+        setEngineWeights(prev => {
+          const newWeights = { ...prev };
+
+          // Decay weights towards 1.0 slowly to prevent them from getting stuck
+          newWeights.neural += (1.0 - newWeights.neural) * 0.05;
+          newWeights.markov += (1.0 - newWeights.markov) * 0.05;
+          newWeights.sector += (1.0 - newWeights.sector) * 0.05;
+          newWeights.bias += (1.0 - newWeights.bias) * 0.05;
+          newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
+
+          // 1. If table is very chaotic (high unique numbers), reduce Neural/Markov and increase Sector/Bias
+          if (chaos > 0.8) {
+            newWeights.neural = Math.max(0.5, newWeights.neural - 0.1);
+            newWeights.markov = Math.max(0.5, newWeights.markov - 0.1);
+            newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
+            newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
+            newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
+          } 
+          // 2. If table is repeating (low unique numbers), increase Neural/Markov
+          else if (chaos < 0.4) {
+            newWeights.neural = Math.min(2.0, newWeights.neural + 0.1);
+            newWeights.markov = Math.min(2.0, newWeights.markov + 0.1);
+            newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
+            newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
+            newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
+          }
+          // 3. If there is strong sector concentration, boost Sector weight
+          if (maxSectorCount >= 5) {
+            newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
+            newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
+          }
+
+          // 4. History length factor
+          if (history.length > 100) {
+            newWeights.markov = Math.min(newWeights.markov + 0.2, 1.8);
+            newWeights.neural = Math.min(newWeights.neural + 0.1, 1.8);
+          }
+
+          // 5. Apply dynamic hits/misses adjustments if applicable
+          newWeights.neural = Math.max(0.5, Math.min(2.0, newWeights.neural + (neuralHit ? 0.1 : -0.02)));
+          newWeights.markov = Math.max(0.5, Math.min(2.0, newWeights.markov + (markovHit ? 0.1 : -0.02)));
+
+          return newWeights;
+        });
+      });
+    } else {
+      // Adjust weights even without neural/markov evaluation for shorter history
+      setEngineWeights(prev => {
+        const newWeights = { ...prev };
+        newWeights.neural += (1.0 - newWeights.neural) * 0.05;
+        newWeights.markov += (1.0 - newWeights.markov) * 0.05;
+        newWeights.sector += (1.0 - newWeights.sector) * 0.05;
+        newWeights.bias += (1.0 - newWeights.bias) * 0.05;
+        newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
+        
+        if (chaos > 0.8) {
+          newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
+          newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
+          newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
+        } else if (chaos < 0.4) {
+          newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
+          newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
+          newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
+        }
+        if (maxSectorCount >= 5) {
+          newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
+          newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
+        }
+        return newWeights;
+      });
     }
-
-    // Adjust weights based on table behavior
-    setEngineWeights(prev => {
-      const newWeights = { ...prev };
-
-      // Decay weights towards 1.0 slowly to prevent them from getting stuck
-      newWeights.neural += (1.0 - newWeights.neural) * 0.05;
-      newWeights.markov += (1.0 - newWeights.markov) * 0.05;
-      newWeights.sector += (1.0 - newWeights.sector) * 0.05;
-      newWeights.bias += (1.0 - newWeights.bias) * 0.05;
-      newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
-
-      // 1. If table is very chaotic (high unique numbers), reduce Neural/Markov and increase Sector/Bias
-      if (chaos > 0.8) {
-        newWeights.neural = Math.max(0.5, newWeights.neural - 0.1);
-        newWeights.markov = Math.max(0.5, newWeights.markov - 0.1);
-        newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
-        newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
-        newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
-      } 
-      // 2. If table is repeating (low unique numbers), increase Neural/Markov
-      else if (chaos < 0.4) {
-        newWeights.neural = Math.min(2.0, newWeights.neural + 0.1);
-        newWeights.markov = Math.min(2.0, newWeights.markov + 0.1);
-        newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
-        newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
-        newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
-      }
-      // 3. If there is strong sector concentration, boost Sector weight
-      if (maxSectorCount >= 5) {
-        newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
-        newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
-      }
-
-      // 4. History length factor
-      if (history.length > 100) {
-        newWeights.markov = Math.min(newWeights.markov + 0.2, 1.8);
-        newWeights.neural = Math.min(newWeights.neural + 0.1, 1.8);
-      }
-
-      // 5. Apply dynamic hits/misses adjustments if applicable
-      if (history.length >= 20) {
-        newWeights.neural = Math.max(0.5, Math.min(2.0, newWeights.neural + (neuralHit ? 0.1 : -0.02)));
-        newWeights.markov = Math.max(0.5, Math.min(2.0, newWeights.markov + (markovHit ? 0.1 : -0.02)));
-      }
-
-      return newWeights;
-    });
   }, [history]);
 
   const [isNotificationsMuted, setIsNotificationsMuted] = useState(false);
@@ -453,15 +421,6 @@ export default function App() {
 
     if (!validate(num)) return;
 
-    // --- ENTRY FILTER LOGIC ---
-    // Check if the landed number was in the targets of the PREVIOUS prediction
-    const isHit = previousTargets.includes(num);
-    if (isHit) {
-      setEntryStep(prev => Math.min(prev + 1, 3)); // Max 3 steps for stability
-    } else {
-      setEntryStep(0); // Reset on miss to ensure "Quebra de Win" handling
-    }
-
     // Simulate haptic feedback
     if (window.navigator.vibrate) {
       window.navigator.vibrate(20);
@@ -494,21 +453,9 @@ export default function App() {
     setHistory(prev => [num, ...prev].slice(0, 500));
   }, [ballisticMode, currentDropPoint]);
 
-  const setDropPoint = React.useCallback((num: number) => {
-    if (num >= 0 && num <= 36) {
-      setCurrentDropPoint(num);
-      toast.info(`Ponto de soltura definido: ${num}`, {
-        description: 'A predição balística agora baseia-se neste ponto.',
-        icon: <Target className="w-4 h-4 text-emerald-500" />
-      });
-    }
-  }, []);
-
   const clearHistory = React.useCallback(() => {
     setHistory([]);
     setDismissedAlerts([]);
-    setEntryStep(0);
-    setPreviousTargets([]);
   }, []);
 
   const removeLast = React.useCallback(() => {
@@ -1085,7 +1032,6 @@ export default function App() {
     });
 
     // --- CAMADA 5: NEURAL ENGINE (TENSORFLOW) ---
-    const neuralProbs = neuralEngine.predict(history);
     neuralProbs.forEach((prob, num) => {
       numberScores[num] += prob * 180 * engineWeights.neural; // Dynamic weight
     });
@@ -1988,27 +1934,6 @@ export default function App() {
       numberScores[neuralTopNum] *= 1.5; // 50% de bônus para convergência total
     }
 
-    // --- CAMADA 30: SUPER CONVERGENCE (CROSS-LAYER INTERSECTION) ---
-    // Encontra números que aparecem em múltiplas camadas de análise
-    for (let i = 0; i <= 36; i++) {
-      let layerHits = 0;
-      if (numberScores[i] > 100) layerHits++;
-      if (contextTargets.includes(i)) layerHits++;
-      if (neuralProbs[i] > 0.1) layerHits++;
-      
-      const t = i % 10;
-      if (scores[t] > 100) layerHits++;
-
-      if (layerHits >= 3) {
-        numberScores[i] += 200 * (layerHits / 3) * engineWeights.bias;
-        detectedBiases.push({
-          type: 'Super Convergência',
-          value: `Número ${i}: Sincronia de ${layerHits} camadas detectada.`,
-          confidence: Math.min(85 + (layerHits * 4), 99)
-        });
-      }
-    }
-
     const sortedNumbers = numberScores
       .map((score, num) => ({ num, score }))
       .sort((a, b) => b.score - a.score);
@@ -2166,19 +2091,11 @@ export default function App() {
         mainTarget,
         isSniper,
         betPercentage,
-        neuralTop: neuralProbs.map((p, i) => ({ num: i, prob: p })).sort((a, b) => b.prob - a.prob).slice(0, 5),
-        entrySignal: entryStep >= 2 ? 'PLAY' : entryStep === 1 ? 'WAIT_CONFIRM' : 'OBSERVING'
+        neuralTop: (neuralProbs || new Array(37).fill(0)).map((p, i) => ({ num: i, prob: p })).sort((a, b) => b.prob - a.prob).slice(0, 5)
       },
       systemStatus
     };
-  }, [history, engineWeights, ballisticMode, entryStep]);
-
-  // Sync previous targets for next hit evaluation
-  useEffect(() => {
-    if (stats?.prediction?.targets) {
-      setPreviousTargets(stats.prediction.targets);
-    }
-  }, [stats?.prediction?.targets]);
+  }, [history, engineWeights, ballisticMode, neuralProbs, currentDropPoint]);
 
   const { highlightedNumbers, allCylinderTargets, vacuumNumbers, targetZone, isOmega } = useMemo(() => {
     if (!stats) return { highlightedNumbers: [], allCylinderTargets: [], vacuumNumbers: [], targetZone: "", isOmega: false };
@@ -2444,7 +2361,9 @@ export default function App() {
   if (!isAppAuthorized) {
     return (
       <ErrorBoundary>
+        <Suspense fallback={<TabLoading />}>
           <LoginScreen onLogin={() => setIsAppAuthorized(true)} />
+        </Suspense>
       </ErrorBoundary>
     );
   }
@@ -2706,8 +2625,6 @@ export default function App() {
                   setBallisticMode(!ballisticMode);
                   setCurrentDropPoint(null);
                 }}
-                onSetDropPoint={setDropPoint}
-                entryStep={entryStep}
               />
             </motion.div>
           </Suspense>

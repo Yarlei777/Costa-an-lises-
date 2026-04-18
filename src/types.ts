@@ -33,7 +33,6 @@ export interface Prediction {
   isSniper: boolean;
   betPercentage: number;
   neuralTop?: { num: number; prob: number }[];
-  entrySignal?: 'OBSERVING' | 'WAIT_CONFIRM' | 'PLAY';
 }
 
 export interface Bias {

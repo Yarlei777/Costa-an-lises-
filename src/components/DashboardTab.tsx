@@ -28,8 +28,6 @@ interface DashboardTabProps {
   ballisticMode?: boolean;
   currentDropPoint?: number | null;
   onToggleBallisticMode?: () => void;
-  onSetDropPoint?: (num: number) => void;
-  entryStep?: number;
 }
 
 const INPUT_NUMBERS = Array.from({ length: 37 }, (_, i) => i);
@@ -54,9 +52,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   onClearBrowser,
   ballisticMode,
   currentDropPoint,
-  onToggleBallisticMode,
-  onSetDropPoint,
-  entryStep = 0
+  onToggleBallisticMode
 }) => {
   const [searchValue, setSearchValue] = React.useState('');
   const [isIframeLoading, setIsIframeLoading] = React.useState(false);
@@ -318,38 +314,14 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
           <div className="w-full bg-black/40 backdrop-blur-xl border border-white/5 rounded-[2rem] p-6 relative overflow-hidden group">
             <div className="flex items-center justify-between relative z-10">
               <div className="flex flex-col">
-                <h3 className={`text-lg font-black uppercase tracking-tighter italic ${stats?.prediction?.entrySignal === 'PLAY' ? 'text-emerald-500' : isOmega ? 'text-emerald-500' : 'gold-text'}`}>
-                  {stats?.prediction?.entrySignal === 'PLAY' ? (
-                    <motion.span
-                      animate={{ opacity: [1, 0.5, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                    >
-                      JOGAR AGORA
-                    </motion.span>
-                  ) : stats?.prediction?.entrySignal === 'WAIT_CONFIRM' ? (
-                    'Confirmando...'
-                  ) : stats?.prediction?.isSniper ? (
-                    'Fogo Livre'
-                  ) : isOmega ? (
-                    'Convergência Ômega'
-                  ) : (
-                    'Analise em Curso'
-                  )}
+                <h3 className={`text-lg font-black uppercase tracking-tighter italic ${isOmega ? 'text-emerald-500' : 'gold-text'}`}>
+                  {stats?.prediction?.isSniper ? 'Fogo Livre' : isOmega ? 'Convergência Ômega' : 'Análise Neural'}
                 </h3>
                 <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Sincronia do Motor</span>
               </div>
               <div className="text-right">
                 <div className={`text-3xl font-black leading-none ${isOmega ? 'text-emerald-500' : 'gold-text'}`}>
                   {stats?.prediction?.isSniper ? stats?.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%
-                </div>
-                <div className="flex gap-1 mt-2 justify-end">
-                   <span className="text-[6px] uppercase tracking-tighter text-zinc-600 font-black mr-1">Status:</span>
-                   {[1, 2].map((step) => (
-                     <div 
-                       key={step} 
-                       className={`w-1.5 h-1.5 rounded-full border border-white/10 transition-all duration-500 ${entryStep >= step ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-white/10'}`} 
-                     />
-                   ))}
                 </div>
               </div>
             </div>
@@ -398,11 +370,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
 
           <div className="grid grid-cols-6 sm:grid-cols-9 lg:grid-cols-12 gap-2">
             {INPUT_NUMBERS.map((num) => (
-              <button 
-                key={num} 
-                onClick={() => ballisticMode && onSetDropPoint ? onSetDropPoint(num) : addNumber(num)} 
-                className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-black border border-white/10 transition-all hover:scale-110 ${COLORS[ROULETTE_NUMBERS[num].color]} ${ballisticMode && currentDropPoint === num ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-black' : ''}`}
-              >
+              <button key={num} onClick={() => addNumber(num)} className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-black border border-white/10 transition-all hover:scale-110 ${COLORS[ROULETTE_NUMBERS[num].color]}`}>
                 {num}
               </button>
             ))}

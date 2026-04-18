@@ -4,17 +4,7 @@ import { Image as ImageIcon, Upload, Loader2, CheckCircle2, AlertCircle, X, Hash
 import { GoogleGenAI, Type } from "@google/genai";
 import { toast } from 'sonner';
 
-let aiInstance: GoogleGenAI | null = null;
-const getAi = () => {
-  if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("GEMINI_API_KEY não encontrada no ambiente.");
-    }
-    aiInstance = new GoogleGenAI({ apiKey: apiKey || '' });
-  }
-  return aiInstance;
-};
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 interface HistoryScannerProps {
   onNumbersDetected: (nums: number[]) => void;
@@ -85,7 +75,6 @@ const HistoryScanner: React.FC<HistoryScannerProps> = ({ onNumbersDetected }) =>
       // Convert canvas to base64 for Gemini
       const base64Data = canvas.toDataURL('image/png').split(',')[1];
 
-      const ai = getAi();
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: {
