@@ -75,7 +75,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             <ShieldCheck className="w-10 h-10 text-black" />
           </motion.div>
           <h1 className="text-4xl font-black tracking-tighter uppercase italic gold-text text-center opacity-40">
-            Costa <span className="text-white">analises</span>
+            Exu <span className="text-white">do ouro</span>
           </h1>
           <p className="text-[10px] uppercase tracking-[0.6em] text-zinc-500 font-black mt-2 opacity-30">Protocolo de Elite</p>
         </div>

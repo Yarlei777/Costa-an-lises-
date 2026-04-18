@@ -178,6 +178,9 @@ export default function App() {
     enabled: true
   });
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
+  const [consecutiveMisses, setConsecutiveMisses] = useState(0);
+  const [consecutiveNearHits, setConsecutiveNearHits] = useState(0);
+  const lastTargetsRef = React.useRef<number[]>([]);
   const [engineWeights, setEngineWeights] = useState({
     neural: 1.0,
     markov: 1.0,
@@ -187,20 +190,6 @@ export default function App() {
   });
   const [ballisticMode, setBallisticMode] = useState(false);
   const [currentDropPoint, setCurrentDropPoint] = useState<number | null>(null);
-  const [neuralProbs, setNeuralProbs] = useState<number[]>(new Array(37).fill(0));
-
-  // --- NEURAL PREDICTION UPDATER ---
-  useEffect(() => {
-    if (history.length >= 10) {
-      neuralEngine.predict(history).then(probs => {
-        if (Array.isArray(probs)) {
-          setNeuralProbs(probs);
-        }
-      }).catch(err => console.error("Neural prediction error:", err));
-    } else {
-      setNeuralProbs(new Array(37).fill(0));
-    }
-  }, [history.length]);
 
   // --- AUTOMATIC WEIGHT BALANCING (BRAIN ADAPTATION) ---
   useEffect(() => {
@@ -287,7 +276,7 @@ export default function App() {
 
           return newWeights;
         });
-      });
+      }).catch(err => console.error("Dynamic weight balancing error:", err));
     } else {
       // Adjust weights even without neural/markov evaluation for shorter history
       setEngineWeights(prev => {
@@ -484,7 +473,65 @@ export default function App() {
   };
 
   // Advanced Statistics & Prediction Engine (Ensemble Module)
-  const stats = useMemo(() => {
+  const stats = useRouletteStats(history, engineWeights, ballisticMode, currentDropPoint);
+
+  // --- GREEN LIGHTNING LOGIC: TRACKING STRIKES ---
+  useEffect(() => {
+    if (history.length > 0 && lastTargetsRef.current.length > 0) {
+      const landed = history[0];
+      const targets = lastTargetsRef.current;
+
+      let isDirectHit = false;
+      let isNearHit = false;
+      let isTwoAway = false;
+
+      targets.forEach(t => {
+        if (t === landed) isDirectHit = true;
+        
+        const idx = WHEEL_ORDER.indexOf(t);
+        const neighbor1Idx = (idx - 1 + 37) % 37;
+        const neighbor2Idx = (idx + 1) % 37;
+        const twoAway1Idx = (idx - 2 + 37) % 37;
+        const twoAway2Idx = (idx + 2) % 37;
+
+        if (landed === WHEEL_ORDER[neighbor1Idx] || landed === WHEEL_ORDER[neighbor2Idx]) {
+          isNearHit = true;
+        }
+        if (landed === WHEEL_ORDER[twoAway1Idx] || landed === WHEEL_ORDER[twoAway2Idx]) {
+          isTwoAway = true;
+        }
+      });
+
+      // User Logic:
+      // "se bater do lado do alvo ainda funciona como ruim" (neighbor = miss)
+      // "se não bater do lado bater dois vizinhos do lado já já não conta como um só" (2-away = reset/not counting)
+      
+      if (isDirectHit) {
+        setConsecutiveMisses(0);
+        setConsecutiveNearHits(0);
+      } else if (isNearHit) {
+        setConsecutiveMisses(prev => prev + 1); // Near hit still counts as a "bad" result (miss)
+        setConsecutiveNearHits(prev => prev + 1); // But also increments the "near hit" specific streak
+      } else if (isTwoAway) {
+        // Two pockets away is neutral/drift - per user "não conta como um só", 
+        // we reset near hits but keep misses going? 
+        // Or reset both to signify a "new cycle" of positioning.
+        setConsecutiveNearHits(0);
+        setConsecutiveMisses(prev => prev + 1);
+      } else {
+        setConsecutiveMisses(prev => prev + 1);
+        setConsecutiveNearHits(0);
+      }
+    }
+
+    // Sync targets for next verification
+    if (stats?.prediction?.targets) {
+      lastTargetsRef.current = stats.prediction.targets;
+    }
+  }, [history, stats]);
+
+  /* --- Redundant Logic Removed ---
+  const _scrapped_useMemo = useMemo(() => {
     if (history.length === 0) return null;
 
     const historyTotal = history.length;
@@ -2096,6 +2143,7 @@ export default function App() {
       systemStatus
     };
   }, [history, engineWeights, ballisticMode, neuralProbs, currentDropPoint]);
+  */
 
   const { highlightedNumbers, allCylinderTargets, vacuumNumbers, targetZone, isOmega } = useMemo(() => {
     if (!stats) return { highlightedNumbers: [], allCylinderTargets: [], vacuumNumbers: [], targetZone: "", isOmega: false };
@@ -2413,6 +2461,28 @@ export default function App() {
           transition={{ duration: 0.8, ease: "easeInOut" }}
         />
         <AnimatePresence>
+          {(consecutiveMisses >= 2 || consecutiveNearHits >= 2) && stats && stats.prediction.confidence > 70 && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.5, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.5, y: -20 }}
+              className="fixed top-8 left-1/2 -translate-x-1/2 z-[101] flex flex-col items-center gap-1"
+            >
+              <motion.div 
+                className="bg-zinc-900/90 backdrop-blur-xl border-2 border-green-500/50 rounded-2xl px-6 py-3 flex items-center gap-4 shadow-2xl lightning-pulse"
+              >
+                <div className="bg-green-500 rounded-full p-2 shadow-[0_0_20px_#22c55e]">
+                  <Zap className="w-8 h-8 text-black fill-black" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-green-400 text-xs font-black tracking-widest uppercase">Raio de Execução</span>
+                  <span className="text-white text-lg font-black tracking-tight leading-none">HORA DE JOGAR</span>
+                </div>
+              </motion.div>
+              <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Aguardado convergência: {Math.max(consecutiveMisses, consecutiveNearHits)}º Ciclo</div>
+            </motion.div>
+          )}
+
           {(stats?.prediction?.confidence || 0) > 85 && (
             <motion.div 
               initial={{ opacity: 0, x: -50 }}
@@ -2654,7 +2724,6 @@ export default function App() {
                 addNumber={addNumber} 
                 removeLast={removeLast} 
                 clearHistory={clearHistory} 
-                engineWeights={engineWeights}
                 highlightedNumbers={highlightedNumbers}
                 vacuumNumbers={vacuumNumbers}
                 targetZone={targetZone}
@@ -2671,6 +2740,7 @@ export default function App() {
                   setBallisticMode(!ballisticMode);
                   setCurrentDropPoint(null);
                 }}
+                showLightning={(consecutiveMisses >= 2 || consecutiveNearHits >= 2) && stats && stats.prediction.confidence > 70}
               />
             </motion.div>
           </Suspense>
@@ -2796,10 +2866,6 @@ export default function App() {
             </button>
           </div>
           <div className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-2 opacity-30">
-              <ShieldCheck className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Exu do Ouro Security Protocol</span>
-            </div>
             <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] font-bold">
               Algoritmo de Alta Frequência • Licença de Uso Profissional
             </p>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { RotateCcw, Trash2 } from 'lucide-react';
-import { motion, useAnimation } from 'motion/react';
+import { RotateCcw, Trash2, Zap } from 'lucide-react';
+import { motion, useAnimation, AnimatePresence } from 'motion/react';
 import { MIRROR_NUMBERS_LIST, ESPELHOS_CFG } from '../constants';
 
 interface RouletteWheelVisualProps {
@@ -13,6 +13,7 @@ interface RouletteWheelVisualProps {
   onClearHistory?: () => void;
   onRemoveLast?: () => void;
   lastNumber?: number | null;
+  showLightning?: boolean;
 }
 
 const LEFT_STRAIGHT = [35, 12, 28, 7, 29, 18, 22, 9, 31, 14, 20, 1, 33, 16, 24];
@@ -80,8 +81,8 @@ const RacetrackSegment: React.FC<{
       <path
         d={path}
         fill={color}
-        stroke="url(#goldRimGradient)"
-        strokeWidth="2"
+        stroke="rgba(255,255,255,0.05)"
+        strokeWidth="1"
         className={isHighlighted || isVacuum || isContext ? 'brightness-125' : ''}
       />
       
@@ -131,7 +132,8 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
   isOmega = false,
   onClearHistory,
   onRemoveLast,
-  lastNumber = null
+  lastNumber = null,
+  showLightning = false
 }) => {
   const segments = React.useMemo(() => {
     // Add mirror counterparts to highlighted numbers
@@ -238,21 +240,11 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
         style={{ pointerEvents: 'none' }}
       >
         <defs>
-          {/* Gradiente de Madeira Realista (Mogno) */}
+          {/* Gradiente de Madeira Simplificado */}
           <radialGradient id="woodGradient" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#451a03" />
-            <stop offset="60%" stopColor="#451a03" />
-            <stop offset="100%" stopColor="#0c0a09" />
+            <stop offset="0%" stopColor="#1c1917" />
+            <stop offset="100%" stopColor="#0a0a0a" />
           </radialGradient>
-
-          {/* Gradiente Dourado Polido */}
-          <linearGradient id="goldRimGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#854d0e" />
-            <stop offset="20%" stopColor="#fde047" />
-            <stop offset="45%" stopColor="#fef9c3" />
-            <stop offset="70%" stopColor="#eab308" />
-            <stop offset="100%" stopColor="#422006" />
-          </linearGradient>
 
           {/* Brilho de Alvos */}
           <radialGradient id="targetGlow" cx="50%" cy="50%" r="50%">
@@ -288,11 +280,11 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
         {/* Fundo do Racetrack (Madeira) */}
         <rect x="0" y="0" width="400" height="900" fill="url(#woodGradient)" rx="40" />
         
-        {/* Aro Externo Dourado Polido */}
-        <path d={`M ${CENTER_X - OUTER_RADIUS} ${TOP_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X + OUTER_RADIUS} ${TOP_Y} L ${CENTER_X + OUTER_RADIUS} ${BOTTOM_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X - OUTER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="4" />
+        {/* Aro Externo */}
+        <path d={`M ${CENTER_X - OUTER_RADIUS} ${TOP_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X + OUTER_RADIUS} ${TOP_Y} L ${CENTER_X + OUTER_RADIUS} ${BOTTOM_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X - OUTER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
         
-        {/* Aro Interno Dourado Polido */}
-        <path d={`M ${CENTER_X - INNER_RADIUS} ${TOP_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X + INNER_RADIUS} ${TOP_Y} L ${CENTER_X + INNER_RADIUS} ${BOTTOM_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X - INNER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="2" />
+        {/* Aro Interno */}
+        <path d={`M ${CENTER_X - INNER_RADIUS} ${TOP_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X + INNER_RADIUS} ${TOP_Y} L ${CENTER_X + INNER_RADIUS} ${BOTTOM_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X - INNER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
 
         {/* Segmentos */}
         {segments}
@@ -362,31 +354,21 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           `} fill="rgba(234, 179, 8, 0.15)" />
 
           {/* Aro Interno dos Setores */}
-          <path d={`M ${CENTER_X - 45} ${TOP_Y} A 45 45 0 0 1 ${CENTER_X + 45} ${TOP_Y} L ${CENTER_X + 45} ${BOTTOM_Y} A 45 45 0 0 1 ${CENTER_X - 45} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="1.5" />
+          <path d={`M ${CENTER_X - 45} ${TOP_Y} A 45 45 0 0 1 ${CENTER_X + 45} ${TOP_Y} L ${CENTER_X + 45} ${BOTTOM_Y} A 45 45 0 0 1 ${CENTER_X - 45} ${BOTTOM_Y} Z`} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
 
-          {/* Linhas Divisórias dos Setores (Entalhes Metálicos 3D) */}
+          {/* Linhas Divisórias dos Setores */}
           <g>
             {/* Left Side Notches */}
             {[2, 7, 12].map(row => (
               <g key={`left-notch-${row}`}>
-                {/* Sombra */}
-                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT + 2} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT + 2} stroke="#000000" strokeWidth="2" opacity="0.6" />
-                {/* Brilho */}
-                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT - 1} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT - 1} stroke="#ffffff" strokeWidth="1" opacity="0.5" />
-                {/* Barra Metálica */}
-                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT} stroke="url(#goldRimGradient)" strokeWidth="3" />
+                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
               </g>
             ))}
             
             {/* Right Side Notches */}
             {[2, 7, 10].map(row => (
               <g key={`right-notch-${row}`}>
-                {/* Sombra */}
-                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT + 2} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT + 2} stroke="#000000" strokeWidth="2" opacity="0.6" />
-                {/* Brilho */}
-                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT - 1} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT - 1} stroke="#ffffff" strokeWidth="1" opacity="0.5" />
-                {/* Barra Metálica */}
-                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT} stroke="url(#goldRimGradient)" strokeWidth="3" />
+                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
               </g>
             ))}
 
@@ -414,6 +396,72 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           <text x={CENTER_X} y={TOP_Y + 9 * ROW_HEIGHT} fill="#c084fc">Orphelins</text>
           <text x={CENTER_X} y={BOTTOM_Y + 10} fill="#facc15">Tier</text>
         </g>
+
+        {/* Green Lightning Bolt Effect */}
+        <AnimatePresence>
+          {showLightning && (
+            <motion.g
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0 }}
+              style={{ originX: `${CENTER_X}px`, originY: `${TOP_Y - 50}px` }}
+            >
+              <foreignObject 
+                x={CENTER_X - 60} 
+                y={TOP_Y - 140} 
+                width="120" 
+                height="120"
+              >
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.1, 1],
+                      filter: [
+                        'drop-shadow(0 0 10px #22c55e)',
+                        'drop-shadow(0 0 30px #22c55e)',
+                        'drop-shadow(0 0 10px #22c55e)'
+                      ]
+                    }}
+                    transition={{ repeat: Infinity, duration: 0.8 }}
+                    className="p-3 bg-green-500 rounded-2xl shadow-[0_0_30px_#22c55e] border-2 border-green-300/30"
+                  >
+                    <Zap className="w-12 h-12 text-black fill-black" strokeWidth={3} />
+                  </motion.div>
+                  
+                  <motion.div
+                    initial={{ y: 5, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="px-2 py-0.5 bg-green-500 rounded text-[9px] font-black text-black uppercase tracking-tighter"
+                  >
+                    Momento Ótimo
+                  </motion.div>
+                </div>
+              </foreignObject>
+              
+              {/* Electric arcs around the wheel */}
+              {[45, 135, 225, 315].map((angle, i) => {
+                const start = polarToCartesian(CENTER_X, (angle > 180 ? BOTTOM_Y : TOP_Y), OUTER_RADIUS + 5, angle);
+                const end = polarToCartesian(CENTER_X, (angle > 180 ? BOTTOM_Y : TOP_Y), OUTER_RADIUS + 15, angle + 10);
+                return (
+                  <motion.path
+                    key={i}
+                    d={`M ${start.x} ${start.y} Q ${CENTER_X} ${angle > 180 ? BOTTOM_Y : TOP_Y} ${end.x} ${end.y}`}
+                    stroke="#22c55e"
+                    strokeWidth="2"
+                    fill="none"
+                    animate={{
+                      opacity: [0, 1, 0],
+                      pathLength: [0, 1, 0],
+                      x: [0, Math.random() * 10 - 5, 0],
+                      y: [0, Math.random() * 10 - 5, 0]
+                    }}
+                    transition={{ repeat: Infinity, duration: 0.3, delay: i * 0.1 }}
+                  />
+                );
+              })}
+            </motion.g>
+          )}
+        </AnimatePresence>
       </svg>
     </div>
   );

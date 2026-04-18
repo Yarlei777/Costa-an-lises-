@@ -18,9 +18,11 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
 
   // Update neural predictions asynchronously
   useEffect(() => {
-    if (history.length >= 10) {
+    if (history.length >= 15) {
       neuralEngine.predict(history).then(probs => {
         setNeuralProbs(probs);
+      }).catch(err => {
+        console.error("Neural prediction hook error:", err);
       });
     } else {
       setNeuralProbs(new Array(37).fill(0));
@@ -61,44 +63,53 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
     const orphelinsSet = new Set(SECTORS.orphelins);
     const jeuZeroSet = new Set(SECTORS.jeuZero);
 
-    last200.forEach((num, idx) => {
+    // Optimized calculation pass
+    for (let i = 0; i < total200; i++) {
+      const num = last200[i];
       const data = ROULETTE_NUMBERS[num];
-      if (!data) return;
+      if (!data) continue;
 
-      if (data.color === 'red') counts.red++;
-      else if (data.color === 'black') counts.black++;
-      else counts.green++;
-
-      if (num !== 0) {
-        if (data.isEven) counts.even++; else counts.odd++;
-        if (data.isHigh) counts.high++; else counts.low++;
-        
-        if (data.color === 'red') {
+      if (data.color === 'red') {
+        counts.red++;
+        if (num !== 0) {
           if (data.isEven) correlations.redEven++; else correlations.redOdd++;
           if (data.isHigh) correlations.redHigh++; else correlations.redLow++;
-        } else if (data.color === 'black') {
+        }
+      } else if (data.color === 'black') {
+        counts.black++;
+        if (num !== 0) {
           if (data.isEven) correlations.blackEven++; else correlations.blackOdd++;
           if (data.isHigh) correlations.blackHigh++; else correlations.blackLow++;
         }
-        
+      } else {
+        counts.green++;
+      }
+
+      if (num !== 0) {
         if (data.isEven) {
+          counts.even++;
           if (data.isHigh) correlations.evenHigh++; else correlations.evenLow++;
         } else {
+          counts.odd++;
           if (data.isHigh) correlations.oddHigh++; else correlations.oddLow++;
         }
-
-        if (data.dozen === 1) counts.dozen1++;
-        else if (data.dozen === 2) counts.dozen2++;
+        
+        if (data.isHigh) counts.high++; else counts.low++;
+        
+        const dozen = data.dozen;
+        if (dozen === 1) counts.dozen1++;
+        else if (dozen === 2) counts.dozen2++;
         else counts.dozen3++;
         
-        if (data.column === 1) counts.col1++;
-        else if (data.column === 2) counts.col2++;
+        const column = data.column;
+        if (column === 1) counts.col1++;
+        else if (column === 2) counts.col2++;
         else counts.col3++;
 
         const terminal = num % 10;
-        if ([1, 4, 7, 0].includes(terminal)) counts.termGroup1++;
-        else if ([2, 5, 8].includes(terminal)) counts.termGroup2++;
-        else if ([3, 6, 9].includes(terminal)) counts.termGroup3++;
+        if (terminal === 1 || terminal === 4 || terminal === 7 || terminal === 0) counts.termGroup1++;
+        else if (terminal === 2 || terminal === 5 || terminal === 8) counts.termGroup2++;
+        else counts.termGroup3++;
       }
 
       numberFrequency[num] = (numberFrequency[num] || 0) + 1;
@@ -110,8 +121,24 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
       else if (orphelinsSet.has(num)) sectorCounts.orphelins++;
       if (jeuZeroSet.has(num)) sectorCounts.jeuZero++;
 
-      if (idx < 50) freq50[num] = (freq50[num] || 0) + 1;
-    });
+      if (i < 50) freq50[num] = (freq50[num] || 0) + 1;
+    }
+
+    const chaosIndex = history.length < 10 ? 0.5 : new Set(history.slice(0, 15)).size / 15;
+
+    const dealerSignature = history.length >= 5 ? (() => {
+      const distances: number[] = [];
+      for (let i = 0; i < 4; i++) {
+        const currentIdx = WHEEL_ORDER.indexOf(history[i]);
+        const prevIdx = WHEEL_ORDER.indexOf(history[i+1]);
+        let dist = currentIdx - prevIdx;
+        if (dist < 0) dist += 37;
+        distances.push(dist);
+      }
+      const avgDist = distances.reduce((a, b) => a + b, 0) / distances.length;
+      const variance = distances.reduce((a, b) => a + Math.pow(b - avgDist, 2), 0) / distances.length;
+      return { avgDist, variance, distances };
+    })() : null;
 
     const barChartData = Array.from({ length: 37 }, (_, i) => ({
       number: i,
@@ -210,20 +237,12 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
     });
 
     // 4. Dealer Signature (Distance Analysis)
-    if (history.length >= 5) {
-      const distances: number[] = [];
-      for (let i = 0; i < 4; i++) {
-        const currentIdx = WHEEL_ORDER.indexOf(history[i]);
-        const prevIdx = WHEEL_ORDER.indexOf(history[i+1]);
-        let dist = currentIdx - prevIdx;
-        if (dist < 0) dist += 37;
-        distances.push(dist);
-      }
-      const avgDist = distances.reduce((a, b) => a + b, 0) / distances.length;
-      const variance = distances.reduce((a, b) => a + Math.pow(b - avgDist, 2), 0) / distances.length;
-      if (variance < 15) {
-        detectedBiases.push({ type: 'Assinatura', value: `Salto ~${Math.round(avgDist)}`, confidence: Math.min(Math.round((15 - variance) * 6.66), 100) });
-      }
+    if (dealerSignature && dealerSignature.variance < 15) {
+      detectedBiases.push({ 
+        type: 'Assinatura', 
+        value: `Salto ~${Math.round(dealerSignature.avgDist)}`, 
+        confidence: Math.min(Math.round((15 - dealerSignature.variance) * 6.66), 100) 
+      });
     }
 
     // 5. Hot/Cold Analysis
@@ -247,12 +266,12 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
       }
     }
 
-    // --- ENSEMBLE PREDICTION ENGINE ---
+    // --- ENSEMBLE PREDICTION ENGINE: 30 LAYERS OF ANALYSIS ---
     const numberScores = new Array(37).fill(0);
     const scores = new Array(10).fill(0);
     const contextTargets: number[] = [];
 
-    // Layer 1: Families
+    // CAMADA 1: Análise de Famílias (1, 4, 7)
     Object.keys(FAMILIAS_CFG).forEach(key => {
       const familia = FAMILIAS_CFG[key as keyof typeof FAMILIAS_CFG];
       const ultimoVisto = history.findIndex(n => familia.includes(n % 10));
@@ -260,7 +279,7 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
       if (ultimoVisto < 2 && ultimoVisto !== -1) familia.forEach(t => scores[t] += 25);
     });
 
-    // Layer 2: Mirrors & Sector Zero
+    // CAMADA 2: Análise de Espelhos e Setor Zero
     ESPELHOS_CFG.pairs.forEach(pair => {
       const f0 = last50.filter(n => n % 10 === pair[0]).length;
       const f1 = last50.filter(n => n % 10 === pair[1]).length;
@@ -271,17 +290,7 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
       }
     });
 
-    if (history.length > 0) {
-      const lastNum = history[0];
-      ESPELHOS_CFG.digitMirrorPairs.forEach(pair => {
-        if (pair.includes(lastNum)) {
-          const counterpart = pair[0] === lastNum ? pair[1] : pair[0];
-          numberScores[counterpart] += 150 * engineWeights.bias;
-        }
-      });
-    }
-
-    // Camuflados
+    // CAMADA EXTRA: Análise de Camuflados (Soma de Dígitos)
     if (history.length >= 2) {
       const lastNums = history.slice(0, 3);
       const camufladosInHistory = lastNums.filter(n => CAMUFLADOS_NUMBERS.includes(n));
@@ -294,46 +303,52 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
       }
     }
 
-    // Sector Zero Density
-    const last20 = history.slice(0, 20);
-    const contagemSetorZero = last20.filter(n => ESPELHOS_CFG.setorZero.includes(n % 10)).length;
-    if (contagemSetorZero >= 7) ESPELHOS_CFG.setorZero.forEach(t => scores[t] += 40);
-
-    // Layer 3: Momentum
-    const last15 = history.slice(0, 15);
-    for (let i = 0; i < 10; i++) {
-      if (last15.filter(n => n % 10 === i).length >= 3) scores[i] += 20;
-    }
-
-    if (history.length >= 2) {
-      const t1 = history[0] % 10;
-      const t2 = history[1] % 10;
-      const t3 = history.length >= 3 ? history[2] % 10 : -1;
-      if (t1 === t2 && t2 === t3) scores[t1] += 500 * engineWeights.bias;
-      else if (t1 === t2) scores[t1] += 300 * engineWeights.bias;
-    }
-
-    // Layer 5: Neural Engine
-    neuralProbs.forEach((prob, num) => {
-      numberScores[num] += prob * 180 * engineWeights.neural;
+    // CAMADA 3: Análise de Calor e Momentum (Heatmap Ativo)
+    Object.entries(numberFrequency).forEach(([num, count]) => {
+      const n = parseInt(num);
+      numberScores[n] += (count / total200) * 100 * engineWeights.bias;
     });
 
-    // Layer 6: Markov Chain
+    // CAMADA 4: Momentum de Vizinhança
+    if (history.length > 0) {
+      const last = history[0];
+      const idx = WHEEL_ORDER.indexOf(last);
+      [-1, 1].forEach(offset => {
+        const neighbor = WHEEL_ORDER[(idx + offset + 37) % 37];
+        numberScores[neighbor] += 60 * engineWeights.sector;
+      });
+    }
+
+    // CAMADA 5: Neural Engine (Deep Learning via TensorFlow LSTM)
+    neuralProbs.forEach((prob, num) => {
+      numberScores[num] += prob * 350 * engineWeights.neural;
+      
+      const wheelIdx = WHEEL_ORDER.indexOf(num);
+      const neighborWeights = [0.4, 0.2];
+      neighborWeights.forEach((w, offset) => {
+        const n1 = WHEEL_ORDER[(wheelIdx - (offset + 1) + 37) % 37];
+        const n2 = WHEEL_ORDER[(wheelIdx + (offset + 1)) % 37];
+        numberScores[n1] += prob * 350 * engineWeights.neural * w;
+        numberScores[n2] += prob * 350 * engineWeights.neural * w;
+      });
+    });
+
+    // CAMADA 6: Markov Chain (Cadeia de Transições Probabilísticas)
     if (history.length > 10) {
       const lastNum = history[0];
       const transitions: Record<number, number> = {};
-      for (let i = 0; i < Math.min(history.length - 1, 100); i++) {
+      for (let i = 0; i < Math.min(history.length - 1, 150); i++) {
         if (history[i+1] === lastNum) {
           const next = history[i];
           transitions[next] = (transitions[next] || 0) + 1;
         }
       }
       Object.entries(transitions).forEach(([num, count]) => {
-        numberScores[Number(num)] += (count / Math.min(history.length, 100)) * 200 * engineWeights.markov;
+        numberScores[Number(num)] += (count / 20) * 300 * engineWeights.markov;
       });
     }
 
-    // Layer 7: Sector Velocity
+    // CAMADA 7: Sector Velocity & Momentum (Inércia do Cilindro)
     const recentSectorCounts: Record<string, number> = {};
     for (let i = 0; i < Math.min(history.length, 5); i++) {
       const s = getSector(history[i]);
@@ -342,58 +357,214 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
     const dominantSector = Object.entries(recentSectorCounts).sort((a, b) => b[1] - a[1])[0];
     if (dominantSector && dominantSector[1] >= 3) {
       const nums = SECTORS[dominantSector[0].toLowerCase() as keyof typeof SECTORS];
-      if (nums) nums.forEach(n => numberScores[n] += 40 * engineWeights.sector);
+      if (nums) nums.forEach(n => numberScores[n] += 50 * engineWeights.sector);
     }
 
-    // Layer 9: Recurrent Vacuum
+    // CAMADA 8: Vizinhos Históricos (Padrões Temporais)
+    if (history.length >= 2) {
+      const lastIdx = WHEEL_ORDER.indexOf(history[0]);
+      const prevIdx = WHEEL_ORDER.indexOf(history[1]);
+      const jump = (lastIdx - prevIdx + 37) % 37;
+      const targetIdx = (lastIdx + jump) % 37;
+      numberScores[WHEEL_ORDER[targetIdx]] += 80 * engineWeights.bias;
+    }
+
+    // CAMADA 9: Vácuo Recorrente (Gap Analysis Avançada)
     for (let t = 0; t < 10; t++) {
       const terminalNums = Array.from({length: 37}, (_, i) => i).filter(n => n % 10 === t);
-      const pastGaps = calculateGaps(history, terminalNums);
-      if (pastGaps.length > 0) {
-        const lastCompletedGap = pastGaps[pastGaps.length - 1];
-        const currentOngoingGap = history.findIndex(n => terminalNums.includes(n));
-        if (currentOngoingGap !== -1 && Math.abs(currentOngoingGap - lastCompletedGap) <= 1 && lastCompletedGap > 0) {
-          scores[t] += 45 * engineWeights.bias;
-        }
-      }
+      const currentOngoingGap = history.findIndex(n => terminalNums.includes(n));
+      if (currentOngoingGap > 12) scores[t] += currentOngoingGap * 5;
     }
 
-    // Layer 13: Ballistic Mode
+    // CAMADA 10: Sequence Analysis (Cores, Paridade e Alto/Baixo)
+    const colorStreak = calculateSequence(history, n => ROULETTE_NUMBERS[n].color === 'red', 'red', 'black');
+    if (colorStreak.current >= 4) {
+      const oppositeColor = colorStreak.type === 'red' ? 'black' : 'red';
+      Array.from({length: 37}, (_, i) => i).filter(n => ROULETTE_NUMBERS[n].color === oppositeColor)
+        .forEach(n => numberScores[n] += colorStreak.current * 15);
+    }
+
+    // CAMADA 11: Table Heatmap (Frequência Bruta na Mesa)
+    barChartData.forEach(item => {
+      numberScores[item.number] += item.frequency * 10;
+    });
+
+    // CAMADA 12: Historical Gap Pattern (Vácuo Individual por Número)
+    for (let i = 0; i <= 36; i++) {
+      const gap = history.indexOf(i);
+      if (gap > 37) numberScores[i] += (gap - 37) * 4;
+    }
+
+    // CAMADA 13: Dealer Signature (Assinatura Mecânica do Crupiê)
+    if (dealerSignature && dealerSignature.variance < 10) {
+      const predictedIdx = (WHEEL_ORDER.indexOf(history[0]) + Math.round(dealerSignature.avgDist)) % 37;
+      numberScores[WHEEL_ORDER[predictedIdx]] += 150;
+    }
+
+    // CAMADA 13.5: Ballistic Mode (Cálculo Físico de Ponto de Soltura)
     if (ballisticMode && currentDropPoint !== null) {
-      const distances: number[] = [];
-      for (let i = 0; i < Math.min(10, history.length - 1); i++) {
-        const currentIdx = WHEEL_ORDER.indexOf(history[i]);
-        const prevIdx = WHEEL_ORDER.indexOf(history[i+1]);
-        let dist = currentIdx - prevIdx;
-        if (dist < 0) dist += 37;
-        distances.push(dist);
-      }
-      if (distances.length > 0) {
-        const distFreq: Record<number, number> = {};
-        distances.forEach(d => distFreq[d] = (distFreq[d] || 0) + 1);
-        const mostFrequentDist = parseInt(Object.keys(distFreq).reduce((a, b) => distFreq[parseInt(a)] > distFreq[parseInt(b)] ? a : b));
-        const dropIdx = WHEEL_ORDER.indexOf(currentDropPoint);
-        const predictedIdx = (dropIdx + mostFrequentDist) % 37;
-        const predictedNum = WHEEL_ORDER[predictedIdx];
-        numberScores[predictedNum] += 500; 
-        for (let offset = -2; offset <= 2; offset++) {
-          if (offset === 0) continue;
-          const idx = (predictedIdx + offset + 37) % 37;
-          numberScores[WHEEL_ORDER[idx]] += 200;
+      const dropIdx = WHEEL_ORDER.indexOf(currentDropPoint);
+      const dists = history.slice(0, 5).map((n, i) => (WHEEL_ORDER.indexOf(n) - WHEEL_ORDER.indexOf(history[i+1]) + 37) % 37);
+      const avgDist = dists.reduce((a, b) => a + b, 0) / dists.length;
+      const targetIdx = (dropIdx + Math.round(avgDist)) % 37;
+      numberScores[WHEEL_ORDER[targetIdx]] += 400;
+    }
+
+    // CAMADA 14: Z-Score (Desvio Padrão e Anomalias Estatísticas)
+    const expected = total200 / 37;
+    const stdDev = Math.sqrt(total200 * (1/37) * (36/37));
+    Object.entries(numberFrequency).forEach(([num, count]) => {
+      const z = (count - expected) / stdDev;
+      if (z > 2) numberScores[parseInt(num)] += z * 40;
+    });
+
+    // CAMADA 15: Cluster Analysis (Agrupamentos de Queda Recente)
+    const recent10 = history.slice(0, 10);
+    const recentIndices = recent10.map(n => WHEEL_ORDER.indexOf(n));
+    recentIndices.forEach(idx => {
+      [-2, -1, 1, 2].forEach(offset => {
+        const neighbor = WHEEL_ORDER[(idx + offset + 37) % 37];
+        numberScores[neighbor] += 30;
+      });
+    });
+
+    // CAMADA 15.5: Sector Velocity (Análise de Momentum Inverso)
+    const lastSector = getSector(history[0]);
+    const prevSector = getSector(history[1]);
+    if (lastSector === prevSector) {
+      const oppositeSectorMap: Record<string, string> = { 'VOISINS': 'TIERS', 'TIERS': 'VOISINS', 'ORPHELINS': 'VOISINS' };
+      const opp = oppositeSectorMap[lastSector] || 'VOISINS';
+      SECTORS[opp.toLowerCase() as keyof typeof SECTORS]?.forEach(n => numberScores[n] += 40);
+    }
+
+    // CAMADA 15.7: Sequential Pattern Recognition (Recorrência de Ordem)
+    if (history.length >= 4) {
+      const pattern = history.slice(0, 2);
+      for (let i = 2; i < Math.min(history.length - 2, 100); i++) {
+        if (history[i] === pattern[1] && history[i+1] === pattern[0]) {
+          numberScores[history[i-1]] += 100;
         }
       }
     }
 
-    // Final scores normalization
+    // CAMADA 15.9: Mirror Convergence (Simetria de Dígitos e Espelhamento)
+    ESPELHOS_CFG.digitMirrorPairs.forEach(pair => {
+      if (history.slice(0, 5).includes(pair[0]) && !history.slice(0, 5).includes(pair[1])) {
+        numberScores[pair[1]] += 80;
+      }
+    });
+
+    // CAMADA 16: Chaos Index (Fator de Volatilidade da Mesa)
+    const chaos = new Set(history.slice(0, 15)).size / 15;
+    if (chaos < 0.4) numberScores.forEach((_, i) => numberScores[i] *= 1.2); // Low chaos = higher predictability
+
+    // CAMADA 17: Dynamic Cross-Terminal Convergence
+    if (history.length > 0) {
+      const lastTerm = history[0] % 10;
+      const convergenceMap: Record<number, number[]> = { 1: [4, 7], 2: [5, 8], 3: [6, 9], 0: [0] };
+      (convergenceMap[lastTerm] || []).forEach(t => scores[t] += 40);
+    }
+
+    // CAMADA 18: Approximation Engine (Busca por Vizinhança de Alvos)
+    const tempScores = [...numberScores];
+    tempScores.forEach((score, num) => {
+      if (score > 200) {
+        const idx = WHEEL_ORDER.indexOf(num);
+        [-1, 1].forEach(off => numberScores[WHEEL_ORDER[(idx + off + 37) % 37]] += score * 0.3);
+      }
+    });
+
+    // CAMADA 19: Short-Term Convergence (Micro-janela de 10 rodadas)
+    history.slice(0, 10).forEach(n => numberScores[n] += 25);
+
+    // CAMADA 20: Lei do Terceiro (Law of the Thirds)
+    const seen37 = new Set(history.slice(0, 37));
+    Array.from({length: 37}, (_, i) => i).filter(n => !seen37.has(n)).forEach(n => numberScores[n] += 45);
+
+    // CAMADA 21: Padrão de Pêndulo (Pendulum Strike)
+    if (history.length >= 2) {
+      const s1 = getSector(history[0]);
+      const s2 = getSector(history[1]);
+      if (s1 !== s2) {
+        SECTORS[s1.toLowerCase() as keyof typeof SECTORS]?.forEach(n => numberScores[n] += 30);
+      }
+    }
+
+    // CAMADA 22: Geometria de Mesa (Análise de Dúzias e Colunas)
+    if (counts.dozen1 < counts.dozen2 && counts.dozen1 < counts.dozen3) {
+      Array.from({length: 37}, (_, i) => i).filter(n => ROULETTE_NUMBERS[n]?.dozen === 1).forEach(n => numberScores[n] += 40);
+    }
+
+    // CAMADA 23: Ressonância de Fibonacci (Proporções Áureas de Queda)
+    const fib = [1, 2, 3, 5, 8, 13, 21];
+    fib.forEach(f => {
+      if (history.length > f) {
+        const n = history[f];
+        numberScores[n] += 20;
+      }
+    });
+
+    // CAMADA 24: Detector de Alternância (Choppy vs Streaky)
+    const isChoppy = history.slice(0, 10).every((n, i) => i === 0 || ROULETTE_NUMBERS[n].color !== ROULETTE_NUMBERS[history[i-1]].color);
+    if (isChoppy) {
+      const lastColor = ROULETTE_NUMBERS[history[0]].color;
+      Array.from({length: 37}, (_, i) => i).filter(n => ROULETTE_NUMBERS[n].color !== lastColor).forEach(n => numberScores[n] += 60);
+    }
+
+    // CAMADA 25: Wheel Slice Analysis (Fatiamento Granular da Roda)
+    const slices = 6;
+    const sliceSize = Math.floor(37 / slices);
+    const sliceCounts = new Array(slices).fill(0);
+    history.slice(0, 20).forEach(n => {
+      const idx = WHEEL_ORDER.indexOf(n);
+      sliceCounts[Math.floor(idx / sliceSize)]++;
+    });
+    const lowSlice = sliceCounts.indexOf(Math.min(...sliceCounts));
+    for (let i = lowSlice * sliceSize; i < (lowSlice + 1) * sliceSize; i++) {
+      if (WHEEL_ORDER[i] !== undefined) numberScores[WHEEL_ORDER[i]] += 40;
+    }
+
+    // CAMADA 26: Análise de Longo Prazo (Espelhamento de Sequência)
+    if (history.length > 100) {
+      const recent3 = history.slice(0, 3);
+      for (let i = 50; i < history.length - 3; i++) {
+        if (history[i] === recent3[0] && history[i+1] === recent3[1]) {
+          numberScores[history[i-1]] += 70;
+        }
+      }
+    }
+
+    // CAMADA 27: Sector Transition Matrix (Matriz de Transição entre Setores)
+    if (history.length > 5) {
+      const lastS = getSector(history[0]);
+      const sectorTransitions: Record<string, number> = {};
+      for (let i = 0; i < history.length - 1; i++) {
+        if (getSector(history[i+1]) === lastS) {
+          const nextS = getSector(history[i]);
+          sectorTransitions[nextS] = (sectorTransitions[nextS] || 0) + 1;
+        }
+      }
+      const sortedS = Object.entries(sectorTransitions).sort((a,b) => b[1]-a[1]);
+      const nextS = sortedS[0]?.[0];
+      if (nextS) SECTORS[nextS.toLowerCase() as keyof typeof SECTORS]?.forEach(n => numberScores[n] += 50);
+    }
+
+    // CAMADA 28: Cross-Sector Terminal Break (Quebra de Padrão de Terminal)
+    const lastT = history[0] % 10;
+    const lastS2 = getSector(history[0]);
+    if (history.slice(1, 5).some(n => n % 10 === lastT && getSector(n) !== lastS2)) {
+      Array.from({length: 37}, (_, i) => i).filter(n => n % 10 === lastT && getSector(n) === lastS2).forEach(n => numberScores[n] += 90);
+    }
+
+    // CAMADA 29: Neural-Markov Convergence Boost (Sincronia de Motores)
+    const topNeural = neuralProbs.indexOf(Math.max(...neuralProbs));
+    if (numberScores[topNeural] > 300) numberScores[topNeural] += 200;
+
+    // CAMADA 30: Super Convergence (Intersecção Final de Todas as Camadas)
     for (let i = 0; i <= 36; i++) {
       numberScores[i] += scores[i % 10];
+      if (numberScores[i] > 600) numberScores[i] *= 1.3;
     }
-
-    const chaosIndex = (() => {
-      if (history.length < 10) return 0.5;
-      const uniqueNums = new Set(history.slice(0, 15)).size;
-      return uniqueNums / 15;
-    })();
 
     const sortedNumbers = numberScores
       .map((score, num) => ({ num, score }))
@@ -462,20 +633,6 @@ export function useRouletteStats(history: number[], engineWeights: any, ballisti
       { name: 'G2 (2,5,8)', value: counts.termGroup2, color: '#B38728' },
       { name: 'G3 (3,6,9)', value: counts.termGroup3, color: '#AA771C' }
     ];
-
-    const dealerSignature = history.length >= 5 ? (() => {
-      const distances: number[] = [];
-      for (let i = 0; i < 4; i++) {
-        const currentIdx = WHEEL_ORDER.indexOf(history[i]);
-        const prevIdx = WHEEL_ORDER.indexOf(history[i+1]);
-        let dist = currentIdx - prevIdx;
-        if (dist < 0) dist += 37;
-        distances.push(dist);
-      }
-      const avgDist = distances.reduce((a, b) => a + b, 0) / distances.length;
-      const variance = distances.reduce((a, b) => a + Math.pow(b - avgDist, 2), 0) / distances.length;
-      return { avgDist, variance, distances };
-    })() : null;
 
     const groupPredictions = (() => {
       const g1 = scores[1] + scores[4] + scores[7] + scores[0];

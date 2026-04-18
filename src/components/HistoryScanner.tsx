@@ -1,11 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Image as ImageIcon, Upload, Loader2, CheckCircle2, AlertCircle, X, Hash } from 'lucide-react';
+import { Image as ImageIcon, Upload, Loader2, CheckCircle2, AlertCircle, X, Hash, Zap } from 'lucide-react';
 import { toast } from 'sonner';
+import { GoogleGenAI } from "@google/genai";
 
 interface HistoryScannerProps {
   onNumbersDetected: (nums: number[]) => void;
 }
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const HistoryScanner: React.FC<HistoryScannerProps> = ({ onNumbersDetected }) => {
   const [isScanning, setIsScanning] = useState(false);
@@ -19,7 +22,6 @@ const HistoryScanner: React.FC<HistoryScannerProps> = ({ onNumbersDetected }) =>
     setDetectedNums([]);
     
     try {
-      // Create a canvas to pre-process the image
       const img = new Image();
       const imageUrl = typeof imageSource === 'string' ? imageSource : URL.createObjectURL(imageSource);
       
@@ -33,61 +35,37 @@ const HistoryScanner: React.FC<HistoryScannerProps> = ({ onNumbersDetected }) =>
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error("Could not get canvas context");
 
-      // Set canvas size to image size * 2 for better balance between precision and payload size
+      // Set canvas size
       const scale = 2;
       const padding = 50; 
       canvas.width = img.width * scale + padding * 2;
       canvas.height = img.height * scale + padding * 2;
 
-      // Fill with white background
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Draw upscaled image with padding and WITHOUT smoothing
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, padding, padding, img.width * scale, img.height * scale);
 
-      // MANUAL PIXEL PROCESSING
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        
-        // Very sensitive threshold to catch all colors (Red, Green, White)
-        const maxColor = Math.max(r, g, b);
-        const isNumber = maxColor > 40;
-        
-        // Convert to Black (0) on White (255)
-        const val = isNumber ? 0 : 255;
-        
-        data[i] = val;
-        data[i + 1] = val;
-        data[i + 2] = val;
-      }
-      ctx.putImageData(imageData, 0, 0);
-
-      // Convert canvas to base64 for Proxy
+      // Convert canvas to base64
       const base64Data = canvas.toDataURL('image/png').split(',')[1];
 
-      const res = await fetch("/api/analyze-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: base64Data,
-          prompt: "Extract all roulette numbers (0-36) from this history screenshot. Return ONLY a JSON array of integers in the order they appear (top-left to bottom-right)."
-        })
+      // Call Gemini directly from frontend
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: {
+          parts: [
+            { inlineData: { mimeType: "image/png", data: base64Data } },
+            { text: "Extract all roulette numbers (0-36) from this history screenshot. Return ONLY a JSON array of integers in the order they appear (top-left to bottom-right)." }
+          ]
+        },
+        config: {
+          responseMimeType: "application/json"
+        }
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Failed to process image");
-      }
-      
-      const { result: nums } = await res.json();
-      const validNums = (nums as number[]).filter(n => n >= 0 && n <= 36);
+      const text = response.text || "[]";
+      const nums = JSON.parse(text);
+      const validNums = (nums as number[]).filter(n => typeof n === 'number' && n >= 0 && n <= 36);
       
       if (validNums.length > 0) {
         setDetectedNums(validNums);
@@ -96,8 +74,8 @@ const HistoryScanner: React.FC<HistoryScannerProps> = ({ onNumbersDetected }) =>
         toast.error("Nenhum número de roleta (0-36) detectado.");
       }
     } catch (err) {
-      console.error("OCR Error:", err);
-      toast.error("Erro ao processar imagem. Tente um print mais nítido.");
+      console.error("AI Analysis Error:", err);
+      toast.error("Erro ao analisar imagem. Verifique sua conexão ou tente um print mais nítido.");
     } finally {
       setIsScanning(false);
     }

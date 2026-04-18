@@ -44,16 +44,16 @@ const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type }) => {
             <div className="space-y-6 text-zinc-400 text-xs font-medium leading-relaxed">
               {type === 'terms' ? (
                 <>
-                  <p>Bem-vindo ao Costa Análises. Ao utilizar nosso terminal, você concorda com os seguintes termos:</p>
+                  <p>Bem-vindo ao Exu do Ouro. Ao utilizar nosso terminal, você concorda com os seguintes termos:</p>
                   <div className="space-y-4">
                     <h3 className="text-white font-black uppercase tracking-widest text-[10px]">1. Uso do Software</h3>
-                    <p>O Costa Análises é uma ferramenta de análise estatística. Não garantimos lucros e não nos responsabilizamos por perdas financeiras.</p>
+                    <p>O Exu do Ouro é uma ferramenta de análise estatística. Não garantimos lucros e não nos responsabilizamos por perdas financeiras.</p>
                     
                     <h3 className="text-white font-black uppercase tracking-widest text-[10px]">2. Responsabilidade</h3>
                     <p>O usuário é o único responsável por suas decisões de apostas. O jogo deve ser encarado como entretenimento.</p>
                     
                     <h3 className="text-white font-black uppercase tracking-widest text-[10px]">3. Propriedade Intelectual</h3>
-                    <p>Todo o código e algoritmos são de propriedade exclusiva do Costa Análises ou licenciados sob MIT conforme o repositório.</p>
+                    <p>Todo o código e algoritmos são de propriedade exclusiva do Exu do Ouro ou licenciados sob MIT conforme o repositório.</p>
                   </div>
                 </>
               ) : (
@@ -75,7 +75,7 @@ const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type }) => {
 
             <div className="mt-12 pt-8 border-t border-white/5 flex items-center gap-3 opacity-30">
               <Shield className="w-4 h-4" />
-              <span className="text-[8px] uppercase tracking-[0.4em] font-black">Costa Security Protocol Active</span>
+              <span className="text-[8px] uppercase tracking-[0.4em] font-black">Exu Security Protocol Active</span>
             </div>
           </motion.div>
       )}
