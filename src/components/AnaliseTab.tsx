@@ -28,7 +28,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
       className="grid grid-cols-1 lg:grid-cols-12 gap-10"
     >
       {/* Left: Terminal Analysis */}
-      <div className="lg:col-span-7 space-y-10" style={{ contentVisibility: 'auto', containIntrinsicSize: '0 500px' }}>
+      <div className="lg:col-span-7 space-y-10">
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center gap-3 mb-8">
             <Zap className="w-4 h-4 text-gold-primary" />
@@ -248,46 +248,6 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
 
       {/* Right: Full Bias Monitor */}
       <div className="lg:col-span-5 space-y-10">
-        {/* System Status Layer */}
-        <section className="glass-card rounded-[2rem] p-8 border-gold-primary/10">
-          <div className="flex items-center gap-3 mb-6">
-            <Activity className="w-4 h-4 text-gold-primary" />
-            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Status dos Motores</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {stats?.systemStatus && Object.entries(stats.systemStatus).map(([engine, status]) => (
-              <div key={engine} className="p-3 bg-white/5 rounded-xl border border-white/5 flex items-center justify-between">
-                <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{engine}</span>
-                <div className="flex items-center gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full ${status === 'ONLINE' || status === 'ACTIVE' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-gold-primary animate-pulse'}`} />
-                  <span className={`text-[8px] font-black ${status === 'ONLINE' || status === 'ACTIVE' ? 'text-emerald-500' : 'text-gold-primary'}`}>{status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Neural Engine Insights */}
-        <section className="glass-card rounded-[2rem] p-8 border-gold-primary/10">
-          <div className="flex items-center gap-3 mb-6">
-            <Zap className="w-4 h-4 text-gold-primary" />
-            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Insights Neurais (Deep Learning)</h2>
-          </div>
-          <div className="space-y-3">
-            {stats?.prediction?.neuralTop?.map((item, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border ${ROULETTE_NUMBERS[item.num].color === 'red' ? 'bg-red-500/20 border-red-500/30 text-red-500' : ROULETTE_NUMBERS[item.num].color === 'black' ? 'bg-zinc-800 border-white/10 text-white' : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-500'}`}>
-                    {item.num}
-                  </div>
-                  <span className="text-[10px] font-bold text-zinc-400">Probabilidade Neural</span>
-                </div>
-                <span className="text-xs font-black gold-text">{(item.prob * 100).toFixed(1)}%</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">

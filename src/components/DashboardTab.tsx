@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Activity, Target, Search, Loader2, ExternalLink, X, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
+import { Zap, Activity, Target, Search, Loader2, RotateCcw, Maximize2, Minimize2, X } from 'lucide-react';
 import Markdown from 'react-markdown';
-import { Stats, RouletteNumber } from '../types';
+import { Stats } from '../types';
 import { COLORS, ROULETTE_NUMBERS, MIRROR_NUMBERS_LIST, ESPELHOS_CFG } from '../constants';
 import RouletteWheelVisual from './RouletteWheelVisual';
 
@@ -30,26 +30,6 @@ interface DashboardTabProps {
 }
 
 const INPUT_NUMBERS = Array.from({ length: 37 }, (_, i) => i);
-
-const NumberButton = React.memo<{ num: number; onClick: (num: number) => void }>(({ num, onClick }) => (
-  <button 
-    onClick={() => onClick(num)} 
-    className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-black border border-white/10 transition-all hover:scale-110 active:scale-95 will-change-transform ${COLORS[ROULETTE_NUMBERS[num].color]}`}
-  >
-    {num}
-  </button>
-));
-
-const RecentNumberCard = React.memo<{ num: number; id: string }>(({ num, id }) => (
-  <motion.div
-    key={id}
-    initial={{ scale: 0.8, opacity: 0 }}
-    animate={{ scale: 1, opacity: 1 }}
-    className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-black border border-white/10 shadow-lg ${COLORS[ROULETTE_NUMBERS[num].color]}`}
-  >
-    {num}
-  </motion.div>
-));
 
 const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   stats,
@@ -118,6 +98,62 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
     }
   };
 
+  const allCylinderTargets = React.useMemo(() => {
+    const targetsMap = new Map<number, { num: number; confidence: number; isMirrorOnly: boolean }>();
+    
+    // First, add all highlighted numbers with their original confidence
+    highlightedNumbers.forEach(num => {
+      const confObj = stats?.prediction?.targetsWithConfidence?.find(t => t.num === num);
+      targetsMap.set(num, {
+        num,
+        confidence: confObj ? confObj.confidence : 85, // Default high confidence if not found
+        isMirrorOnly: false
+      });
+    });
+    
+    // Then, add mirrors for the highlighted numbers
+    highlightedNumbers.forEach(num => {
+      [...ESPELHOS_CFG.digitMirrorPairs, ...ESPELHOS_CFG.pairs].forEach(pair => {
+        let mirrorNum: number | null = null;
+        if (pair[0] === num) mirrorNum = pair[1];
+        else if (pair[1] === num) mirrorNum = pair[0];
+        
+        if (mirrorNum !== null && !targetsMap.has(mirrorNum)) {
+          const originalConf = targetsMap.get(num)?.confidence || 85;
+          targetsMap.set(mirrorNum, {
+            num: mirrorNum,
+            confidence: Math.max(originalConf - 5, 50), // Slightly lower confidence for mirrors
+            isMirrorOnly: true
+          });
+        }
+      });
+    });
+    
+    // Add vacuum numbers
+    vacuumNumbers.forEach(num => {
+      if (!targetsMap.has(num)) {
+        targetsMap.set(num, {
+          num,
+          confidence: 70, // Default confidence for vacuum numbers
+          isMirrorOnly: false
+        });
+      }
+    });
+
+    // Add context targets
+    contextTargets.forEach(num => {
+      if (!targetsMap.has(num)) {
+        targetsMap.set(num, {
+          num,
+          confidence: 65, // Default confidence for context targets
+          isMirrorOnly: false
+        });
+      }
+    });
+    
+    return Array.from(targetsMap.values()).sort((a, b) => b.confidence - a.confidence);
+  }, [highlightedNumbers, stats?.prediction?.targetsWithConfidence, vacuumNumbers, contextTargets]);
+
   // Performance optimization for animations
   const containerStyle = React.useMemo(() => ({
     contain: 'layout style paint' as const,
@@ -145,67 +181,72 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       <div className="lg:col-span-12 mb-6">
         <div className="flex items-center justify-between px-4 py-2 bg-black/40 backdrop-blur-md border-b border-gold-primary/20 rounded-t-3xl">
           <div className="flex items-center gap-4">
-            {stats?.systemStatus && (
-              <div className="hidden md:flex items-center gap-3 px-3 py-1 bg-white/5 rounded-full border border-white/10">
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-1 h-1 rounded-full ${stats.systemStatus.neural === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
-                  <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Neural</span>
-                </div>
-                <div className="w-[1px] h-2 bg-white/10" />
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-1 h-1 rounded-full ${stats.systemStatus.markov === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
-                  <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Markov</span>
-                </div>
-                <div className="w-[1px] h-2 bg-white/10" />
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-1 h-1 rounded-full ${stats.systemStatus.bias === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
-                  <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Bias</span>
-                </div>
-              </div>
-            )}
-            <div className="flex items-center gap-4">
-              <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/500</span>
-              <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(history.length / 500) * 100}%` }}
-                  className="h-full bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,0.5)]" 
-                />
-              </div>
+            <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/500</span>
+            <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${(history.length / 500) * 100}%` }}
+                className="h-full bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,0.5)]" 
+              />
             </div>
           </div>
           
           <div className="flex flex-col items-center">
-            {history.length < 25 && (
-              <div className="group relative flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full animate-pulse cursor-help">
-                <div className="w-1 h-1 rounded-full bg-blue-500" />
-                <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">Germinação</span>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-black/90 border border-blue-500/30 rounded-lg text-[8px] text-blue-200 font-bold leading-tight opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
-                  O sistema está em fase de coleta de dados. A precisão máxima será atingida após 25 números inseridos.
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-black uppercase tracking-[0.8em] gold-text">Exu do Ouro</h1>
+              {history.length < 25 && (
+                <div className="group relative flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full animate-pulse cursor-help">
+                  <div className="w-1 h-1 rounded-full bg-blue-500" />
+                  <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">Germinação</span>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-black/90 border border-blue-500/30 rounded-lg text-[8px] text-blue-200 font-bold leading-tight opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
+                    O sistema está em fase de coleta de dados. A precisão máxima será atingida após 25 números inseridos.
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+            <div className="h-[1px] w-32 bg-gradient-to-r from-transparent via-gold-primary/50 to-transparent mt-1" />
           </div>
 
-          <div className="flex items-center gap-4 opacity-0 pointer-events-none">
-            {/* Espaçador para manter o "Germinação" centralizado */}
-            <div className="w-24 h-1" />
-            <span className="text-[10px] tracking-widest">0/0</span>
+          <div className="flex items-center gap-4">
+            <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${(history.length / 500) * 100}%` }}
+                className="h-full bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,0.5)]" 
+              />
+            </div>
+            <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/500</span>
           </div>
         </div>
       </div>
       {/* Layout de 3 Colunas para Desktop (Análise ao redor do Navegador) */}
       <div className="lg:col-span-3 space-y-6 order-2 lg:order-1">
-        {/* Cérebro Central - Removido conforme solicitação, já existe aba específica */}
+        {/* Cérebro Central */}
         <section className="glass-card rounded-[2rem] p-6">
-          <div className="flex flex-col items-center gap-4 py-4 text-center">
-            <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20">
-              <Zap className="w-6 h-6 text-emerald-500" />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-gold-primary" />
+              <span className="text-[9px] uppercase tracking-[0.3em] text-zinc-500 font-black">Motores Neurais</span>
             </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Sistema Ativo</p>
-              <p className="text-[8px] text-zinc-500 font-bold mt-1">Motores integrados em tempo real</p>
-            </div>
+          </div>
+          <div className="space-y-2">
+            {[
+              { label: 'Neural', weight: engineWeights.neural },
+              { label: 'Markov', weight: engineWeights.markov },
+              { label: 'Setor', weight: engineWeights.sector },
+              { label: 'Viés', weight: engineWeights.bias },
+              { label: 'Curto', weight: engineWeights.shortTerm }
+            ].map((item, i) => (
+              <div key={i} className="p-2 bg-white/5 rounded-xl border border-white/5 flex flex-col gap-0.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-[7px] uppercase tracking-widest text-zinc-600 font-bold">{item.label}</span>
+                  <span className="text-[8px] font-black gold-text">x{item.weight.toFixed(2)}</span>
+                </div>
+                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-gold-primary" style={{ width: `${(item.weight / 2) * 100}%` }} />
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -239,6 +280,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             )}
           </div>
         </section>
+
       </div>
 
       {/* Center Column: Search & Browser (Main Focus) */}
@@ -248,13 +290,13 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
           <div className="w-full bg-black/40 backdrop-blur-xl border border-white/5 rounded-[2rem] p-6 relative overflow-hidden group">
             <div className="flex items-center justify-between relative z-10">
               <div className="flex flex-col">
-                <h3 className={`text-lg font-black uppercase tracking-tighter italic ${isOmega ? 'text-emerald-500' : 'gold-text'}`}>
+                <h3 className={`text-lg font-black uppercase tracking-tighter italic ${isOmega ? 'text-red-500' : 'gold-text'}`}>
                   {stats?.prediction?.isSniper ? 'Fogo Livre' : isOmega ? 'Convergência Ômega' : 'Análise Neural'}
                 </h3>
                 <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Sincronia do Motor</span>
               </div>
               <div className="text-right">
-                <div className={`text-3xl font-black leading-none ${isOmega ? 'text-emerald-500' : 'gold-text'}`}>
+                <div className={`text-3xl font-black leading-none ${isOmega ? 'text-red-500' : 'gold-text'}`}>
                   {stats?.prediction?.isSniper ? stats?.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%
                 </div>
               </div>
@@ -263,63 +305,13 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${stats?.prediction?.isSniper ? stats?.prediction?.betPercentage : Math.round(stats?.prediction?.confidence || 0)}%` }}
-                className={`h-full transition-all duration-1000 ${isOmega ? 'bg-emerald-500' : 'bg-emerald-500/80'}`}
+                className={`h-full transition-all duration-1000 ${isOmega ? 'bg-red-500' : 'bg-gold-primary'}`}
               />
             </div>
           </div>
         </section>
 
-        {/* Manual Input (Moved Up) */}
-        <section className="glass-card rounded-[2rem] p-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Zap className="w-4 h-4 text-gold-primary" />
-              <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">Entrada de Dados Rápida</h2>
-            </div>
-            <button onClick={onToggleBallisticMode} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${ballisticMode ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-white/5 border-white/10 text-zinc-500'}`}>
-              {ballisticMode ? 'Balística ON' : 'Balística OFF'}
-            </button>
-          </div>
-
-          {/* Recent Numbers Preview */}
-          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar" style={{ contain: 'content' }}>
-            <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mr-2 whitespace-nowrap">Últimos:</span>
-            {recentNumbers.length > 0 ? (
-              <div className="flex gap-1.5">
-                {recentNumbers.map((num, idx) => (
-                  <RecentNumberCard key={`${num}-${history.length - idx}`} num={num} id={`${num}-${history.length - idx}`} />
-                ))}
-              </div>
-            ) : (
-              <span className="text-[9px] font-bold text-zinc-700 uppercase tracking-widest italic">Aguardando dados...</span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-6 sm:grid-cols-9 lg:grid-cols-12 gap-2" style={{ contain: 'content' }}>
-            {INPUT_NUMBERS.map((num) => (
-              <NumberButton key={num} num={num} onClick={addNumber} />
-            ))}
-          </div>
-          <div className="mt-6 flex justify-center gap-4">
-            <button onClick={removeLast} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400">Desfazer</button>
-            <button onClick={clearHistory} className="px-4 py-2 bg-red-500/5 border border-red-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-red-500">Limpar</button>
-          </div>
-        </section>
-
-        {/* Roulette Wheel Visual (Moved Up, under Manual Input) */}
-        <section className="glass-card rounded-[2rem] p-0 overflow-hidden">
-          <RouletteWheelVisual 
-            highlightedNumbers={highlightedNumbers} 
-            contextNumbers={contextTargets}
-            vacuumNumbers={vacuumNumbers}
-            mainTarget={stats?.prediction?.mainTarget}
-            targetZone={targetZone} 
-            isOmega={isOmega}
-            lastNumber={lastNumber}
-          />
-        </section>
-
-        {/* Google Search Terminal (Moved Down) */}
+        {/* Google Search Terminal (Significantly Larger) */}
         <section className="glass-card rounded-[2.5rem] p-8 lg:p-10 border-gold-primary/20 shadow-[0_0_50px_rgba(212,175,55,0.1)]">
           <div className="flex items-center gap-4 mb-8">
             <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-xl">
@@ -381,28 +373,10 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                   sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-storage-access-by-user-activation"
                   referrerPolicy="no-referrer"
                 />
-                <div className="absolute top-3 left-3 flex space-x-1.5 z-20">
-                  <button 
-                    onClick={() => setIsMaximized(!isMaximized)} 
-                    className="bg-black/40 backdrop-blur-sm text-white/40 hover:text-white p-1 rounded-md border border-white/5 transition-all hover:scale-105"
-                    title="Maximizar"
-                  >
-                    {isMaximized ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                  </button>
-                  <button 
-                    onClick={handleRefreshIframe} 
-                    className="bg-black/40 backdrop-blur-sm text-white/40 hover:text-white p-1 rounded-md border border-white/5 transition-all hover:scale-105"
-                    title="Atualizar Página"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                  <button 
-                    onClick={handleClearBrowser} 
-                    className="bg-red-500/5 backdrop-blur-sm text-red-500/40 hover:text-red-500 p-1 rounded-md border border-red-500/10 transition-all hover:scale-105"
-                    title="Fechar Navegador"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                <div className="absolute top-6 right-6 flex space-x-3 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => setIsMaximized(!isMaximized)} className="bg-zinc-900/90 text-white p-3 rounded-xl border border-white/10"><Maximize2 className="w-5 h-5" /></button>
+                  <button onClick={handleRefreshIframe} className="bg-zinc-900/90 text-white p-3 rounded-xl border border-white/10"><RotateCcw className="w-5 h-5" /></button>
+                  <button onClick={handleClearBrowser} className="bg-red-500/20 text-red-500 p-3 rounded-xl border border-red-500/30"><X className="w-5 h-5" /></button>
                 </div>
               </div>
             ) : (
@@ -428,10 +402,102 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             )}
           </div>
         </section>
+
+        {/* Manual Input (Bottom of Center) */}
+        <section className="glass-card rounded-[2rem] p-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Zap className="w-4 h-4 text-gold-primary" />
+              <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">Entrada de Dados Rápida</h2>
+            </div>
+            <button onClick={onToggleBallisticMode} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${ballisticMode ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-white/5 border-white/10 text-zinc-500'}`}>
+              {ballisticMode ? 'Balística ON' : 'Balística OFF'}
+            </button>
+          </div>
+
+          {/* Recent Numbers Preview */}
+          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+            <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mr-2 whitespace-nowrap">Últimos:</span>
+            {recentNumbers.length > 0 ? (
+              <div className="flex gap-1.5">
+                {recentNumbers.map((num, idx) => (
+                  <motion.div
+                    key={`${num}-${history.length - idx}`}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black border border-white/10 shadow-lg ${COLORS[ROULETTE_NUMBERS[num].color]}`}
+                  >
+                    {num}
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[9px] font-bold text-zinc-700 uppercase tracking-widest italic">Aguardando dados...</span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-6 sm:grid-cols-9 lg:grid-cols-12 gap-2">
+            {INPUT_NUMBERS.map((num) => (
+              <button key={num} onClick={() => addNumber(num)} className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-black border border-white/10 transition-all hover:scale-110 ${COLORS[ROULETTE_NUMBERS[num].color]}`}>
+                {num}
+              </button>
+            ))}
+          </div>
+          <div className="mt-6 flex justify-center gap-4">
+            <button onClick={removeLast} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400">Desfazer</button>
+            <button onClick={clearHistory} className="px-4 py-2 bg-red-500/5 border border-red-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-red-500">Limpar</button>
+          </div>
+        </section>
+
+        {/* Roulette Wheel Visual (Now in Center) */}
+        <section className="glass-card rounded-[2rem] p-0 overflow-hidden">
+          <RouletteWheelVisual 
+            highlightedNumbers={highlightedNumbers} 
+            contextNumbers={contextTargets}
+            vacuumNumbers={vacuumNumbers}
+            mainTarget={stats?.prediction?.mainTarget}
+            targetZone={targetZone} 
+            isOmega={isOmega}
+            lastNumber={lastNumber}
+          />
+        </section>
       </div>
 
       {/* Right Column: Targets & Wheel (Desktop Right) */}
       <div className="lg:col-span-3 space-y-6 order-3">
+        {/* Números Alvos */}
+        <section className="glass-card rounded-[2rem] p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-gold-primary" />
+              <span className="text-[9px] uppercase tracking-[0.3em] text-zinc-500 font-black">Alvos Prioritários</span>
+            </div>
+          </div>
+          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar" style={{ contain: 'content', willChange: 'scroll-position' }}>
+            {allCylinderTargets.slice(0, 12).map((target, idx) => {
+              const num = target.num;
+              const score = target.confidence;
+              const isMirror = target.isMirrorOnly || MIRROR_NUMBERS_LIST.includes(num);
+              return (
+                <div key={num} className={`p-3 bg-white/5 rounded-xl border flex items-center gap-3 transition-all ${isOmega ? 'border-red-500/30' : isMirror ? 'border-pink-500/30' : 'border-gold-primary/10'}`}>
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black border ${COLORS[ROULETTE_NUMBERS[num].color]} ${isOmega ? 'border-red-500/50' : 'border-gold-primary/30'}`}>
+                    {num}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[7px] font-black uppercase text-zinc-500">{isMirror ? 'Espelho' : 'Assertividade'}</span>
+                      <span className={`text-[10px] font-black ${isOmega ? 'text-red-500' : 'gold-text'}`}>{score}%</span>
+                    </div>
+                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                      <div className={`h-full ${isOmega ? 'bg-red-500' : 'bg-gold-primary'}`} style={{ width: `${score}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         {/* Últimos Números */}
         <section className="glass-card rounded-[2rem] p-6">
           <div className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mb-4 flex items-center gap-2">

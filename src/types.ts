@@ -32,7 +32,6 @@ export interface Prediction {
   mainTarget: number | null;
   isSniper: boolean;
   betPercentage: number;
-  neuralTop?: { num: number; prob: number }[];
 }
 
 export interface Bias {
@@ -88,13 +87,6 @@ export interface Stats {
   };
   tableHeatmap: { num: number; frequency: number; color: string }[];
   contextTargets: number[];
-  systemStatus?: {
-    neural: string;
-    markov: string;
-    bias: string;
-    sector: string;
-    ballistic: string;
-  };
 }
 
 export type AlertType = 'color' | 'parity' | 'highlow' | 'dozen' | 'column' | 'terminal' | 'terminalGroup';

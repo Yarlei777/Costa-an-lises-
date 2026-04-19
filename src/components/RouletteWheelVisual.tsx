@@ -74,15 +74,14 @@ const RacetrackSegment: React.FC<{
   isOmega: boolean;
   color: string;
 }> = React.memo(({ num, path, textX, textY, textRotation = 0, isHighlighted, isContext, isVacuum, isMirror, isMainTarget, isOmega, color }) => {
-  const isActive = isHighlighted || isVacuum || isContext;
   return (
-    <g style={isActive ? { willChange: 'filter, brightness' } : undefined}>
+    <g>
       {/* Fatia do Número */}
       <path
         d={path}
         fill={color}
-        stroke="rgba(255,255,255,0.05)"
-        strokeWidth="1"
+        stroke="url(#goldRimGradient)"
+        strokeWidth="2"
         className={isHighlighted || isVacuum || isContext ? 'brightness-125' : ''}
       />
       
@@ -239,11 +238,21 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
         style={{ pointerEvents: 'none' }}
       >
         <defs>
-          {/* Gradiente de Madeira Simplificado */}
+          {/* Gradiente de Madeira Realista (Mogno) */}
           <radialGradient id="woodGradient" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#1c1917" />
-            <stop offset="100%" stopColor="#0a0a0a" />
+            <stop offset="0%" stopColor="#451a03" />
+            <stop offset="60%" stopColor="#451a03" />
+            <stop offset="100%" stopColor="#0c0a09" />
           </radialGradient>
+
+          {/* Gradiente Dourado Polido */}
+          <linearGradient id="goldRimGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#854d0e" />
+            <stop offset="20%" stopColor="#fde047" />
+            <stop offset="45%" stopColor="#fef9c3" />
+            <stop offset="70%" stopColor="#eab308" />
+            <stop offset="100%" stopColor="#422006" />
+          </linearGradient>
 
           {/* Brilho de Alvos */}
           <radialGradient id="targetGlow" cx="50%" cy="50%" r="50%">
@@ -279,11 +288,11 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
         {/* Fundo do Racetrack (Madeira) */}
         <rect x="0" y="0" width="400" height="900" fill="url(#woodGradient)" rx="40" />
         
-        {/* Aro Externo */}
-        <path d={`M ${CENTER_X - OUTER_RADIUS} ${TOP_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X + OUTER_RADIUS} ${TOP_Y} L ${CENTER_X + OUTER_RADIUS} ${BOTTOM_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X - OUTER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
+        {/* Aro Externo Dourado Polido */}
+        <path d={`M ${CENTER_X - OUTER_RADIUS} ${TOP_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X + OUTER_RADIUS} ${TOP_Y} L ${CENTER_X + OUTER_RADIUS} ${BOTTOM_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X - OUTER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="4" />
         
-        {/* Aro Interno */}
-        <path d={`M ${CENTER_X - INNER_RADIUS} ${TOP_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X + INNER_RADIUS} ${TOP_Y} L ${CENTER_X + INNER_RADIUS} ${BOTTOM_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X - INNER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+        {/* Aro Interno Dourado Polido */}
+        <path d={`M ${CENTER_X - INNER_RADIUS} ${TOP_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X + INNER_RADIUS} ${TOP_Y} L ${CENTER_X + INNER_RADIUS} ${BOTTOM_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X - INNER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="2" />
 
         {/* Segmentos */}
         {segments}
@@ -353,21 +362,31 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           `} fill="rgba(234, 179, 8, 0.15)" />
 
           {/* Aro Interno dos Setores */}
-          <path d={`M ${CENTER_X - 45} ${TOP_Y} A 45 45 0 0 1 ${CENTER_X + 45} ${TOP_Y} L ${CENTER_X + 45} ${BOTTOM_Y} A 45 45 0 0 1 ${CENTER_X - 45} ${BOTTOM_Y} Z`} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+          <path d={`M ${CENTER_X - 45} ${TOP_Y} A 45 45 0 0 1 ${CENTER_X + 45} ${TOP_Y} L ${CENTER_X + 45} ${BOTTOM_Y} A 45 45 0 0 1 ${CENTER_X - 45} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="1.5" />
 
-          {/* Linhas Divisórias dos Setores */}
+          {/* Linhas Divisórias dos Setores (Entalhes Metálicos 3D) */}
           <g>
             {/* Left Side Notches */}
             {[2, 7, 12].map(row => (
               <g key={`left-notch-${row}`}>
-                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+                {/* Sombra */}
+                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT + 2} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT + 2} stroke="#000000" strokeWidth="2" opacity="0.6" />
+                {/* Brilho */}
+                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT - 1} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT - 1} stroke="#ffffff" strokeWidth="1" opacity="0.5" />
+                {/* Barra Metálica */}
+                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT} stroke="url(#goldRimGradient)" strokeWidth="3" />
               </g>
             ))}
             
             {/* Right Side Notches */}
             {[2, 7, 10].map(row => (
               <g key={`right-notch-${row}`}>
-                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+                {/* Sombra */}
+                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT + 2} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT + 2} stroke="#000000" strokeWidth="2" opacity="0.6" />
+                {/* Brilho */}
+                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT - 1} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT - 1} stroke="#ffffff" strokeWidth="1" opacity="0.5" />
+                {/* Barra Metálica */}
+                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT} stroke="url(#goldRimGradient)" strokeWidth="3" />
               </g>
             ))}
 

@@ -15,29 +15,13 @@ window.addEventListener('error', (event) => {
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  // Prevent the default browser behavior
+  // Prevent the default browser behavior (logging to console)
   event.preventDefault();
   
   const reason = event.reason;
-  const message = reason instanceof Error ? reason.message : (reason ? String(reason) : "Empty/Undefined Reason");
+  const message = reason instanceof Error ? reason.message : String(reason);
   
-  // Ignore specific benign errors
-  const ignoredMessages = [
-    'Failed to fetch dynamically imported module',
-    'Importing a module script failed',
-    'The user aborted a request',
-    'ResizeObserver loop'
-  ];
-
-  if (ignoredMessages.some(m => message.includes(m))) {
-    return;
-  }
-  
-  console.error('CRITICAL: Unhandled Promise Rejection Detected', {
-    message,
-    reason,
-    timestamp: new Date().toISOString()
-  });
+  console.error('Unhandled promise rejection:', message, reason);
 });
 
 try {

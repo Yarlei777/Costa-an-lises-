@@ -95,5 +95,5 @@ export const ALERT_TYPES = [
   { id: 'streak', title: 'Sequência Detectada', icon: Zap, color: 'text-gold-primary' },
   { id: 'delay', title: 'Atraso Crítico', icon: Activity, color: 'text-red-500' },
   { id: 'bias', title: 'Viés Estatístico', icon: TrendingUp, color: 'text-emerald-500' },
-  { id: 'omega', title: 'Omega Alert', icon: Target, color: 'text-emerald-500' }
+  { id: 'omega', title: 'Omega Alert', icon: Target, color: 'text-red-600' }
 ];

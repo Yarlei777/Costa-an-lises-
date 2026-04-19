@@ -81,8 +81,75 @@ import {
   MIRROR_NUMBERS_LIST
 } from './constants';
 
+// Utility functions moved outside to prevent re-creation and improve performance
+const calculateSequence = <T extends string>(history: number[], check: (n: number) => boolean, typeA: T, typeB: T) => {
+  if (history.length === 0) return { current: 0, max: 0, type: 'none' as const };
+  let current = 0;
+  let max = 0;
+  
+  const first = history[0];
+  const firstIsA = check(first);
+  const currentType = firstIsA ? typeA : typeB;
+  
+  for (let i = 0; i < history.length; i++) {
+    if (check(history[i]) === firstIsA) {
+      current++;
+    } else {
+      break;
+    }
+  }
 
-import { calculateSequence, calculateGaps, getSector, getSumOfDigits } from './utils/rouletteUtils';
+  let streak = 0;
+  let lastWasA = check(history[0]);
+  for (let i = 0; i < history.length; i++) {
+    const isA = check(history[i]);
+    if (isA === lastWasA) {
+      streak++;
+    } else {
+      max = Math.max(max, streak);
+      streak = 1;
+      lastWasA = isA;
+    }
+  }
+  max = Math.max(max, streak);
+
+  return { current, max, type: currentType };
+};
+
+const calculateGaps = (history: number[], targetNums: number[]) => {
+  const gaps: number[] = [];
+  let currentGap = 0;
+  let foundFirst = false;
+  
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (targetNums.includes(history[i])) {
+      if (foundFirst) {
+        gaps.push(currentGap);
+      }
+      currentGap = 0;
+      foundFirst = true;
+    } else if (foundFirst) {
+      currentGap++;
+    }
+  }
+  return gaps;
+};
+
+const getSector = (n: number) => {
+  if (SECTORS.voisins.includes(n)) return 'VOISINS';
+  if (SECTORS.tiers.includes(n)) return 'TIERS';
+  if (SECTORS.orphelins.includes(n)) return 'ORPHELINS';
+  return 'UNKNOWN';
+};
+
+const getSumOfDigits = (n: number): number => {
+  if (n < 10) return n;
+  let sum = n.toString().split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+  while (sum >= 10) {
+    sum = sum.toString().split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+  }
+  return sum;
+};
 import { Toaster, toast } from 'sonner';
 import { Stats, CustomAlertRule, AlertType } from './types';
 import { neuralEngine } from './services/neuralEngine';
@@ -185,20 +252,6 @@ export default function App() {
   });
   const [ballisticMode, setBallisticMode] = useState(false);
   const [currentDropPoint, setCurrentDropPoint] = useState<number | null>(null);
-  const [neuralProbs, setNeuralProbs] = useState<number[]>(new Array(37).fill(0));
-
-  // --- NEURAL PREDICTION UPDATER ---
-  useEffect(() => {
-    if (history.length >= 15) {
-      neuralEngine.predict(history).then(probs => {
-        if (Array.isArray(probs)) {
-          setNeuralProbs(probs);
-        }
-      }).catch(err => console.error("Neural prediction error:", err));
-    } else {
-      setNeuralProbs(new Array(37).fill(0));
-    }
-  }, [history.length]);
 
   // --- AUTOMATIC WEIGHT BALANCING (BRAIN ADAPTATION) ---
   useEffect(() => {
@@ -219,103 +272,79 @@ export default function App() {
     });
     const maxSectorCount = Math.max(...Object.values(sectorCounts));
 
+    // Evaluate Neural Engine and Markov if history is long enough
+    let neuralHit = false;
+    let markovHit = false;
+
     if (history.length >= 20) {
       const lastNum = history[0];
       const prevHistory = history.slice(1, 101); // Limit to last 100 for evaluation
 
       // Evaluate Neural Engine
-      neuralEngine.predict(prevHistory).then(neuralProbs => {
-        try {
-          const neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
-          
-          // Evaluate Markov
-          const prevLastNum = prevHistory[0];
-          const transitions: Record<number, number> = {};
-          const transitionHistory = prevHistory.slice(0, 50);
-          for (let i = 0; i < transitionHistory.length - 1; i++) {
-            if (transitionHistory[i+1] === prevLastNum) {
-              const next = transitionHistory[i];
-              transitions[next] = (transitions[next] || 0) + 1;
-            }
-          }
-          const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
-          const markovHit = topMarkov && Number(topMarkov[0]) === lastNum;
+      const neuralProbs = neuralEngine.predict(prevHistory);
+      neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
 
-          // Adjust weights based on table behavior
-          setEngineWeights(prev => {
-            const newWeights = { ...prev };
-
-            // Decay weights towards 1.0 slowly to prevent them from getting stuck
-            newWeights.neural += (1.0 - newWeights.neural) * 0.05;
-            newWeights.markov += (1.0 - newWeights.markov) * 0.05;
-            newWeights.sector += (1.0 - newWeights.sector) * 0.05;
-            newWeights.bias += (1.0 - newWeights.bias) * 0.05;
-            newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
-
-            // 1. If table is very chaotic (high unique numbers), reduce Neural/Markov and increase Sector/Bias
-            if (chaos > 0.8) {
-              newWeights.neural = Math.max(0.5, newWeights.neural - 0.1);
-              newWeights.markov = Math.max(0.5, newWeights.markov - 0.1);
-              newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
-              newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
-              newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
-            } 
-            // 2. If table is repeating (low unique numbers), increase Neural/Markov
-            else if (chaos < 0.4) {
-              newWeights.neural = Math.min(2.0, newWeights.neural + 0.1);
-              newWeights.markov = Math.min(2.0, newWeights.markov + 0.1);
-              newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
-              newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
-              newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
-            }
-            // 3. If there is strong sector concentration, boost Sector weight
-            if (maxSectorCount >= 5) {
-              newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
-              newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
-            }
-
-            // 4. History length factor
-            if (history.length > 100) {
-              newWeights.markov = Math.min(newWeights.markov + 0.2, 1.8);
-              newWeights.neural = Math.min(newWeights.neural + 0.1, 1.8);
-            }
-
-            // 5. Apply dynamic hits/misses adjustments if applicable
-            newWeights.neural = Math.max(0.5, Math.min(2.0, newWeights.neural + (neuralHit ? 0.1 : -0.02)));
-            newWeights.markov = Math.max(0.5, Math.min(2.0, newWeights.markov + (markovHit ? 0.1 : -0.02)));
-
-            return newWeights;
-          });
-        } catch (innerErr) {
-          console.error("Error processing neural prediction results:", innerErr);
+      // Evaluate Markov
+      const prevLastNum = prevHistory[0];
+      const transitions: Record<number, number> = {};
+      const transitionHistory = prevHistory.slice(0, 50);
+      for (let i = 0; i < transitionHistory.length - 1; i++) {
+        if (transitionHistory[i+1] === prevLastNum) {
+          const next = transitionHistory[i];
+          transitions[next] = (transitions[next] || 0) + 1;
         }
-      }).catch(err => console.error("Dynamic weight balancing error:", err));
-    } else {
-      // Adjust weights even without neural/markov evaluation for shorter history
-      setEngineWeights(prev => {
-        const newWeights = { ...prev };
-        newWeights.neural += (1.0 - newWeights.neural) * 0.05;
-        newWeights.markov += (1.0 - newWeights.markov) * 0.05;
-        newWeights.sector += (1.0 - newWeights.sector) * 0.05;
-        newWeights.bias += (1.0 - newWeights.bias) * 0.05;
-        newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
-        
-        if (chaos > 0.8) {
-          newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
-          newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
-          newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
-        } else if (chaos < 0.4) {
-          newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
-          newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
-          newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
-        }
-        if (maxSectorCount >= 5) {
-          newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
-          newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
-        }
-        return newWeights;
-      });
+      }
+      const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
+      if (topMarkov && Number(topMarkov[0]) === lastNum) markovHit = true;
     }
+
+    // Adjust weights based on table behavior
+    setEngineWeights(prev => {
+      const newWeights = { ...prev };
+
+      // Decay weights towards 1.0 slowly to prevent them from getting stuck
+      newWeights.neural += (1.0 - newWeights.neural) * 0.05;
+      newWeights.markov += (1.0 - newWeights.markov) * 0.05;
+      newWeights.sector += (1.0 - newWeights.sector) * 0.05;
+      newWeights.bias += (1.0 - newWeights.bias) * 0.05;
+      newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
+
+      // 1. If table is very chaotic (high unique numbers), reduce Neural/Markov and increase Sector/Bias
+      if (chaos > 0.8) {
+        newWeights.neural = Math.max(0.5, newWeights.neural - 0.1);
+        newWeights.markov = Math.max(0.5, newWeights.markov - 0.1);
+        newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
+        newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
+        newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
+      } 
+      // 2. If table is repeating (low unique numbers), increase Neural/Markov
+      else if (chaos < 0.4) {
+        newWeights.neural = Math.min(2.0, newWeights.neural + 0.1);
+        newWeights.markov = Math.min(2.0, newWeights.markov + 0.1);
+        newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
+        newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
+        newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
+      }
+      // 3. If there is strong sector concentration, boost Sector weight
+      if (maxSectorCount >= 5) {
+        newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
+        newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
+      }
+
+      // 4. History length factor
+      if (history.length > 100) {
+        newWeights.markov = Math.min(newWeights.markov + 0.2, 1.8);
+        newWeights.neural = Math.min(newWeights.neural + 0.1, 1.8);
+      }
+
+      // 5. Apply dynamic hits/misses adjustments if applicable
+      if (history.length >= 20) {
+        newWeights.neural = Math.max(0.5, Math.min(2.0, newWeights.neural + (neuralHit ? 0.1 : -0.02)));
+        newWeights.markov = Math.max(0.5, Math.min(2.0, newWeights.markov + (markovHit ? 0.1 : -0.02)));
+      }
+
+      return newWeights;
+    });
   }, [history]);
 
   const [isNotificationsMuted, setIsNotificationsMuted] = useState(false);
@@ -403,7 +432,7 @@ export default function App() {
       // Pequeno delay para garantir que a UI atualizou antes de começar o treino pesado
       const timer = setTimeout(() => {
         neuralEngine.train(history).catch(err => console.error("Neural training error:", err));
-      }, 2000);
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [history.length]);
@@ -509,30 +538,51 @@ export default function App() {
     const terminalFrequency: Record<number, number> = {};
     const contextTargets: number[] = [];
     
-    // Sector Analysis Sets for faster lookup
+    // Sector Analysis (Voisins, Tiers, Orphelins, Jeu Zero)
+    const sectorCounts = { voisins: 0, tiers: 0, orphelins: 0, jeuZero: 0 };
+    
+    // Last 50 frequency for Bar Chart
+    const last50 = history.slice(0, 50);
+    const freq50: Record<number, number> = {};
+    last50.forEach(n => freq50[n] = (freq50[n] || 0) + 1);
+    const barChartData = Array.from({ length: 37 }, (_, i) => ({
+      number: i,
+      frequency: freq50[i] || 0,
+      color: ROULETTE_NUMBERS[i].color === 'red' ? '#ef4444' : ROULETTE_NUMBERS[i].color === 'black' ? '#18181b' : '#22c55e'
+    }));
+
+    // Sector Trends (Last 100 divided into 10 blocks of 10)
+    const last100 = history.slice(0, 100);
+    const sectorTrends: { index: number; voisins: number; tiers: number; orphelins: number }[] = [];
     const voisinsSet = new Set(SECTORS.voisins);
     const tiersSet = new Set(SECTORS.tiers);
     const orphelinsSet = new Set(SECTORS.orphelins);
     const jeuZeroSet = new Set(SECTORS.jeuZero);
-    
-    const sectorCounts = { voisins: 0, tiers: 0, orphelins: 0, jeuZero: 0 };
-    
-    // Process stats in a single pass up to 200 items (or full history if less)
-    const limit = Math.min(historyTotal, 200);
-    const last50 = history.slice(0, 50);
-    const freq50: Record<number, number> = {};
-    
-    for (let i = 0; i < limit; i++) {
-      const num = history[i];
-      const data = ROULETTE_NUMBERS[num];
-      if (!data) continue;
 
-      // 1. Bar Chart Data (last 50)
-      if (i < 50) {
-        freq50[num] = (freq50[num] || 0) + 1;
+    for (let i = 0; i < 10; i++) {
+      const block = last100.slice(i * 10, (i + 1) * 10);
+      if (block.length === 0) break;
+      const bCounts = { voisins: 0, tiers: 0, orphelins: 0 };
+      for (const n of block) {
+        if (typeof n !== 'number' || n < 0 || n > 36) continue;
+        if (voisinsSet.has(n)) bCounts.voisins++;
+        else if (tiersSet.has(n)) bCounts.tiers++;
+        else if (orphelinsSet.has(n)) bCounts.orphelins++;
       }
+      sectorTrends.unshift({
+        index: 10 - i,
+        voisins: bCounts.voisins,
+        tiers: bCounts.tiers,
+        orphelins: bCounts.orphelins
+      });
+    }
 
-      // 2. Global Counts & Correlations (last 200)
+    const last200 = history.slice(0, 200);
+    const total200 = last200.length || 1;
+
+    last200.forEach((num) => {
+      const data = ROULETTE_NUMBERS[num];
+      if (!data) return;
       if (data.color === 'red') counts.red++;
       else if (data.color === 'black') counts.black++;
       else counts.green++;
@@ -541,6 +591,7 @@ export default function App() {
         if (data.isEven) counts.even++; else counts.odd++;
         if (data.isHigh) counts.high++; else counts.low++;
         
+        // Correlation Tracking
         if (data.color === 'red') {
           if (data.isEven) correlations.redEven++;
           else correlations.redOdd++;
@@ -574,7 +625,6 @@ export default function App() {
         else if (terminal === 2 || terminal === 5 || terminal === 8) counts.termGroup2++;
         else if (terminal === 3 || terminal === 6 || terminal === 9) counts.termGroup3++;
       }
-
       numberFrequency[num] = (numberFrequency[num] || 0) + 1;
       const terminal = num % 10;
       terminalFrequency[terminal] = (terminalFrequency[terminal] || 0) + 1;
@@ -584,35 +634,7 @@ export default function App() {
       else if (orphelinsSet.has(num)) sectorCounts.orphelins++;
       
       if (jeuZeroSet.has(num)) sectorCounts.jeuZero++;
-    }
-
-    const barChartData = Array.from({ length: 37 }, (_, i) => ({
-      number: i,
-      frequency: freq50[i] || 0,
-      color: ROULETTE_NUMBERS[i].color === 'red' ? '#ef4444' : ROULETTE_NUMBERS[i].color === 'black' ? '#18181b' : '#22c55e'
-    }));
-
-    // Sector Trends (Last 100 divided into 10 blocks of 10)
-    const sectorTrends: { index: number; voisins: number; tiers: number; orphelins: number }[] = [];
-    for (let i = 0; i < 10; i++) {
-      const start = i * 10;
-      if (start >= historyTotal) break;
-      const bCounts = { voisins: 0, tiers: 0, orphelins: 0 };
-      for (let j = start; j < Math.min(start + 10, historyTotal); j++) {
-        const n = history[j];
-        if (voisinsSet.has(n)) bCounts.voisins++;
-        else if (tiersSet.has(n)) bCounts.tiers++;
-        else if (orphelinsSet.has(n)) bCounts.orphelins++;
-      }
-      sectorTrends.unshift({
-        index: 10 - i,
-        voisins: bCounts.voisins,
-        tiers: bCounts.tiers,
-        orphelins: bCounts.orphelins
-      });
-    }
-
-    const total200 = limit || 1;
+    });
 
     // --- BIAS DETECTION ENGINE ---
     const detectedBiases: { type: string; value: string; confidence: number }[] = [];
@@ -1041,6 +1063,7 @@ export default function App() {
     });
 
     // --- CAMADA 5: NEURAL ENGINE (TENSORFLOW) ---
+    const neuralProbs = neuralEngine.predict(history);
     neuralProbs.forEach((prob, num) => {
       numberScores[num] += prob * 180 * engineWeights.neural; // Dynamic weight
     });
@@ -1155,15 +1178,6 @@ export default function App() {
       frequency: numberFrequency[i] || 0,
       color: ROULETTE_NUMBERS[i].color
     }));
-
-    // --- SYSTEM STATUS ---
-    const systemStatus = {
-      neural: history.length >= 25 ? 'ONLINE' : 'TRAINING',
-      markov: history.length >= 10 ? 'ONLINE' : 'COLLECTING',
-      bias: history.length >= 5 ? 'ONLINE' : 'COLLECTING',
-      sector: history.length >= 3 ? 'ONLINE' : 'COLLECTING',
-      ballistic: ballisticMode ? 'ACTIVE' : 'STANDBY'
-    };
 
     // --- CAMADA 12: HISTORICAL GAP PATTERN (INDIVIDUAL NUMBERS) ---
     for (let i = 0; i <= 36; i++) {
@@ -1288,95 +1302,6 @@ export default function App() {
 
     // --- CAMADA 15: CLUSTER ANALYSIS (VIZINHOS DE QUEDA) ---
     const recentHits = history.slice(0, 8);
-    
-    // --- CAMADA 15.5: SECTOR VELOCITY (MOMENTUM DO CILINDRO) ---
-    if (history.length >= 4) {
-      const sectorIndices = history.slice(0, 4).map(n => WHEEL_ORDER.indexOf(n));
-      const velocities: number[] = [];
-      for (let i = 0; i < 3; i++) {
-        let diff = sectorIndices[i] - sectorIndices[i+1];
-        if (diff > 18) diff -= 37;
-        if (diff < -18) diff += 37;
-        velocities.push(diff);
-      }
-      
-      const avgVelocity = velocities.reduce((a, b) => a + b, 0) / velocities.length;
-      const velocityConsistency = velocities.every(v => Math.sign(v) === Math.sign(velocities[0]));
-      
-      if (velocityConsistency && Math.abs(avgVelocity) > 2) {
-        const lastIdx = sectorIndices[0];
-        const predictedIdx = (lastIdx + Math.round(avgVelocity) + 37) % 37;
-        const predictedNum = WHEEL_ORDER[predictedIdx];
-        
-        numberScores[predictedNum] += 120 * engineWeights.bias;
-        // Vizinhos da velocidade
-        for (let offset = -2; offset <= 2; offset++) {
-          const idx = (predictedIdx + offset + 37) % 37;
-          numberScores[WHEEL_ORDER[idx]] += 60 * engineWeights.bias;
-        }
-
-        detectedBiases.push({
-          type: 'Velocidade',
-          value: `Inércia ${avgVelocity > 0 ? 'Horária' : 'Anti-horária'} (+${Math.round(avgVelocity)} casas)`,
-          confidence: 88
-        });
-      }
-    }
-
-    // --- CAMADA 15.7: SEQUENTIAL PATTERN RECOGNITION (RECURRÊNCIA DE SEQUÊNCIA) ---
-    if (history.length >= 10) {
-      const lastTwo = history.slice(0, 2);
-      const sequenceFollowers: Record<number, number> = {};
-      
-      for (let i = 2; i < history.length - 1; i++) {
-        if (history[i] === lastTwo[0] && history[i+1] === lastTwo[1]) {
-          const follower = history[i-1];
-          sequenceFollowers[follower] = (sequenceFollowers[follower] || 0) + 1;
-        }
-      }
-      
-      const topFollowers = Object.entries(sequenceFollowers).sort((a, b) => b[1] - a[1]);
-      if (topFollowers.length > 0) {
-        const [num, count] = topFollowers[0];
-        const confidence = Math.min(count * 35, 95);
-        numberScores[Number(num)] += 150 * (confidence / 100) * engineWeights.markov;
-        
-        detectedBiases.push({
-          type: 'Padrão Sequencial',
-          value: `Sequência [${lastTwo[1]}, ${lastTwo[0]}] -> ${num}`,
-          confidence
-        });
-      }
-    }
-
-    // --- CAMADA 15.9: MIRROR CONVERGENCE (SIMETRIA NUMÉRICA) ---
-    if (history.length >= 3) {
-      const lastNum = history[0];
-      const mirrors: number[] = [];
-      
-      // Check for digit mirrors (e.g., 12 -> 21)
-      const lastStr = lastNum.toString().padStart(2, '0');
-      const reversedStr = lastStr.split('').reverse().join('');
-      const reversedNum = parseInt(reversedStr);
-      if (reversedNum <= 36 && reversedNum !== lastNum) mirrors.push(reversedNum);
-      
-      // Check for terminal mirrors (e.g., 1 -> 10, 2 -> 20)
-      if (lastNum > 0 && lastNum < 4) mirrors.push(lastNum * 10);
-      if (lastNum >= 10 && lastNum % 10 === 0) mirrors.push(lastNum / 10);
-      
-      mirrors.forEach(m => {
-        numberScores[m] += 80 * engineWeights.bias;
-        // Vizinhos do espelho
-        const mIdx = WHEEL_ORDER.indexOf(m);
-        if (mIdx !== -1) {
-          for (let offset = -1; offset <= 1; offset++) {
-            const idx = (mIdx + offset + 37) % 37;
-            numberScores[WHEEL_ORDER[idx]] += 40 * engineWeights.bias;
-          }
-        }
-      });
-    }
-
     const sectorHits: Record<string, number> = { VOISINS: 0, TIERS: 0, ORPHELINS: 0, JEUZERO: 0 };
     
     recentHits.forEach(num => {
@@ -1937,37 +1862,6 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 29: NEURAL-MARKOV CONVERGENCE BOOST ---
-    const neuralTopNum = neuralProbs.indexOf(Math.max(...neuralProbs));
-    if (numberScores[neuralTopNum] > 200) { // Se outros motores também gostam deste número
-      numberScores[neuralTopNum] *= 1.5; // 50% de bônus para convergência total
-    }
-
-    // --- CAMADA 30: TRIPLE CONVERGENCE (MAX PRECISION OVERLAY) ---
-    const markovTop = history.length > 10 ? (() => {
-       const lastN = history[0];
-       const transitions: Record<number, number> = {};
-       for (let i = 0; i < history.length - 1; i++) {
-         if (history[i+1] === lastN) {
-           const next = history[i];
-           transitions[next] = (transitions[next] || 0) + 1;
-         }
-       }
-       const top = Object.entries(transitions).sort((a,b) => b[1]-a[1])[0];
-       return top ? Number(top[0]) : -1;
-    })() : -1;
-
-    if (markovTop === neuralTopNum && markovTop !== -1) {
-       numberScores[markovTop] += 400 * engineWeights.neural;
-       if (!detectedBiases.some(b => b.type === 'Super Convergência')) {
-         detectedBiases.push({
-           type: 'Super Convergência',
-           value: `Markov + Neural ➔ Número ${markovTop}`,
-           confidence: 99
-         });
-       }
-    }
-
     const sortedNumbers = numberScores
       .map((score, num) => ({ num, score }))
       .sort((a, b) => b.score - a.score);
@@ -1975,13 +1869,13 @@ export default function App() {
     const top8 = (sortedNumbers || []).slice(0, 8);
     
     // Normalize scores to percentages for UI
-    const maxPossibleScore = 1800; // Increased max for new convergence layer
+    const maxPossibleScore = 1400; // Updated max for new Long Term layer
     const targetsWithConfidence = top8.map(t => ({
       num: t.num,
       confidence: Math.min(Math.round((t.score / maxPossibleScore) * 100 * (1.2 - chaosIndex)), 99)
     }));
 
-    // --- CAMADA 31: SNIPER CONVERGENCE (MAX PRECISION) ---
+    // --- CAMADA 18: SNIPER CONVERGENCE (MAX PRECISION) ---
     const mainTarget = top8[0]?.num ?? 0;
     const mainScore = top8[0]?.score ?? 0;
     
@@ -2124,12 +2018,10 @@ export default function App() {
         isConcentrated,
         mainTarget,
         isSniper,
-        betPercentage,
-        neuralTop: (neuralProbs || new Array(37).fill(0)).map((p, i) => ({ num: i, prob: p })).sort((a, b) => b.prob - a.prob).slice(0, 5)
-      },
-      systemStatus
+        betPercentage
+      } 
     };
-  }, [history, engineWeights, ballisticMode, neuralProbs, currentDropPoint]);
+  }, [history, engineWeights]);
 
   const { highlightedNumbers, allCylinderTargets, vacuumNumbers, targetZone, isOmega } = useMemo(() => {
     if (!stats) return { highlightedNumbers: [], allCylinderTargets: [], vacuumNumbers: [], targetZone: "", isOmega: false };
@@ -2210,15 +2102,12 @@ export default function App() {
   useEffect(() => {
     if (history.length < 3) return;
     
-    // Dismiss previous toasts to avoid stacking and honor the "only 3 most recent" request
-    toast.dismiss();
-    
     // 1. Analyze confidence scores of all detected biases and prioritize alerts
     // for those with confidence greater than 85%.
     const highConfidenceBiases = stats?.biases?.filter(b => b.confidence > 85) || [];
     
     highConfidenceBiases.forEach(bias => {
-      const alertMsg = `⚠️ ALERTA: ${bias.type} - ${bias.value}`;
+      const alertMsg = `${bias.value} (${bias.confidence}%)`;
       // Check if this specific alert for this history length has already been shown
       const alertId = `bias-${bias.type}-${bias.value}-${history.length}`;
       
@@ -2227,13 +2116,13 @@ export default function App() {
         if (!isNotificationsMuted) {
           toast.success(alertMsg, {
             id: alertId,
-            duration: 4000,
+            duration: isImportant ? 15000 : 6000,
             style: {
               background: '#050505',
               border: `1px solid ${isImportant ? '#22c55e' : 'rgba(34, 197, 94, 0.2)'}`,
               color: '#fff',
               fontFamily: 'inherit',
-              fontSize: '11px',
+              fontSize: '10px',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               fontWeight: '900'
@@ -2327,20 +2216,20 @@ export default function App() {
       }
 
       if (triggered) {
-        const alertMsg = `🎯 REGRA: ${ruleLabel}`;
+        const alertMsg = ruleLabel;
         const alertId = `rule-${rule.id}-${history.length}`;
         
         if (!dismissedAlerts.includes(alertId)) {
           if (!isNotificationsMuted) {
             toast.success(alertMsg, {
               id: alertId,
-              duration: 4000,
+              duration: 10000,
               style: {
                 background: '#050505',
                 border: '1px solid #22c55e',
                 color: '#fff',
                 fontFamily: 'inherit',
-                fontSize: '11px',
+                fontSize: '10px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 fontWeight: '900'
@@ -2410,26 +2299,26 @@ export default function App() {
       <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-gold-primary/30 relative overflow-hidden" translate="no">
       {/* Toaster for notifications */}
       <Toaster 
-        position="top-right" 
+        position="bottom-right" 
         theme="dark" 
         richColors 
         closeButton 
-        visibleToasts={3}
-        expand={false}
-        gap={6}
         toastOptions={{
-          duration: 4000,
           style: {
             background: 'rgba(5, 5, 5, 0.95)',
-            border: '1px solid rgba(212, 175, 55, 0.4)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(191, 149, 63, 0.4)',
             color: '#fff',
             fontFamily: 'inherit',
-            fontSize: '11px',
+            fontSize: '10px',
             textTransform: 'uppercase',
-            letterSpacing: '0.05em',
+            letterSpacing: '0.1em',
             fontWeight: '900',
-            backdropFilter: 'blur(8px)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            borderRadius: '0.5rem',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(191, 149, 63, 0.1)',
+            width: '180px',
+            minHeight: '60px',
+            padding: '12px'
           }
         }}
       />
@@ -2444,8 +2333,8 @@ export default function App() {
           initial={{ width: 0 }}
           animate={{ 
             width: `${stats?.prediction?.confidence || 0}%`,
-            background: '#22c55e',
-            boxShadow: (stats?.prediction?.confidence || 0) > 85 ? '0 0 30px rgba(34, 197, 94, 0.6)' : '0 0 10px rgba(34, 197, 94, 0.2)'
+            background: (stats?.prediction?.confidence || 0) > 70 ? '#22c55e' : '#222',
+            boxShadow: (stats?.prediction?.confidence || 0) > 85 ? '0 0 30px rgba(34, 197, 94, 0.6)' : 'none'
           }}
           transition={{ duration: 0.8, ease: "easeInOut" }}
         />
@@ -2521,57 +2410,11 @@ export default function App() {
       <header className="glass-card sticky top-0 z-50 border-x-0 border-t-0">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 gold-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-gold-primary/30 border border-white/20 relative overflow-hidden group">
-              <svg viewBox="0 0 100 100" className="w-8 h-8 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                {/* Outer Ring */}
-                <circle cx="50" cy="50" r="45" fill="none" stroke="#222" strokeWidth="8" />
-                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="1" className="text-white/20" />
-                
-                {/* Roulette Slots */}
-                {Array.from({ length: 37 }).map((_, i) => (
-                  <rect
-                    key={i}
-                    x="48"
-                    y="5"
-                    width="4"
-                    height="12"
-                    fill={i === 0 ? "#16a34a" : i % 2 === 0 ? "#000000" : "#dc2626"}
-                    transform={`rotate(${(i * 360) / 37} 50 50)`}
-                  />
-                ))}
-                
-                {/* Golden separator lines */}
-                {Array.from({ length: 37 }).map((_, i) => (
-                  <line
-                    key={`line-${i}`}
-                    x1="50" y1="5" x2="50" y2="17"
-                    stroke="#BF953F"
-                    strokeWidth="0.5"
-                    transform={`rotate(${(i * 360) / 37 + 180/37} 50 50)`}
-                  />
-                ))}
-
-                {/* Inner Golden Hub */}
-                <circle cx="50" cy="50" r="25" fill="#BF953F" />
-                <circle cx="50" cy="50" r="22" fill="url(#gold-radial)" />
-                
-                {/* Hub Detail */}
-                <path d="M50 35 L50 65 M35 50 L65 50" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
-                <circle cx="50" cy="50" r="5" fill="#000" />
-                
-                <defs>
-                  <radialGradient id="gold-radial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-                    <stop offset="0%" stopColor="#FCF6BA" />
-                    <stop offset="50%" stopColor="#BF953F" />
-                    <stop offset="100%" stopColor="#8A6E2F" />
-                  </radialGradient>
-                </defs>
-              </svg>
-              {/* Subtle shining light effect */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent rotate-45 transform -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+            <div className="w-12 h-12 gold-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-gold-primary/30 border border-white/20">
+              <ShieldCheck className="w-7 h-7 text-black" />
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tighter uppercase italic gold-text">Exu <span className="text-white">do ouro</span></h1>
+              <h1 className="text-2xl font-black tracking-tighter uppercase italic gold-text">Costa <span className="text-white">analises</span></h1>
               <p className="text-[10px] uppercase tracking-[0.4em] text-zinc-600 font-black">Terminal de Elite</p>
             </div>
           </div>
@@ -2835,7 +2678,7 @@ export default function App() {
           <div className="flex flex-col items-center gap-4">
             <div className="flex items-center gap-2 opacity-30">
               <ShieldCheck className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Exu do Ouro Security Protocol</span>
+              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Costa Security Protocol</span>
             </div>
             <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] font-bold">
               Algoritmo de Alta Frequência • Licença de Uso Profissional
