@@ -19,9 +19,19 @@ window.addEventListener('unhandledrejection', (event) => {
   event.preventDefault();
   
   const reason = event.reason;
-  const message = reason instanceof Error ? reason.message : String(reason);
+  let message = '';
+  let stack = '';
   
-  console.error('Unhandled promise rejection:', message, reason);
+  if (reason instanceof Error) {
+    message = reason.message;
+    stack = reason.stack || '';
+  } else {
+    message = String(reason);
+  }
+  
+  console.error('Unhandled promise rejection:', message);
+  if (stack) console.error('Stack:', stack);
+  console.error('Full reason object:', reason);
 });
 
 try {

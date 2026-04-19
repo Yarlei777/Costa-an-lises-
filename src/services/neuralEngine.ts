@@ -1,15 +1,25 @@
 import * as tf from '@tensorflow/tfjs';
 import { ROULETTE_NUMBERS } from '../constants';
 
-// Ensure TF backend is ready and catch any initialization errors
-tf.ready().catch(err => console.error("TensorFlow initialization error:", err));
-
 export class NeuralEngine {
   private model: tf.LayersModel | null = null;
   private isTraining: boolean = false;
+  private isReady: boolean = false;
+  private readyPromise: Promise<void>;
 
   constructor() {
-    this.initModel();
+    this.readyPromise = this.init();
+  }
+
+  private async init() {
+    try {
+      await tf.ready();
+      this.initModel();
+      this.isReady = true;
+    } catch (error) {
+      console.error("TensorFlow initialization error:", error);
+      throw error;
+    }
   }
 
   private initModel() {
@@ -69,15 +79,20 @@ export class NeuralEngine {
     ];
   }
 
-  private lastTrainSize: number = 0;
+  private totalProcessed: number = 0;
 
   async train(history: number[]) {
+    await this.readyPromise.catch(() => {});
     // Only train if we have enough data, aren't already training, 
     // and have at least 5 new numbers since last training
-    if (!this.model || history.length < 25 || this.isTraining || (history.length - this.lastTrainSize < 5)) return;
+    if (!this.model || history.length < 25 || this.isTraining) return;
 
+    // Use current first number of history as a proxy for identifying "new" states if length is capped
+    // or just increment a counter in App.tsx. 
+    // Simpler: just clear the check and rely on App.tsx useEffect calling it every 5 numbers.
+    // However, App.tsx might call it too much if we don't have a local guard.
+    
     this.isTraining = true;
-    this.lastTrainSize = history.length;
     
     try {
       const windowSize = 10;
@@ -121,7 +136,7 @@ export class NeuralEngine {
   }
 
   predict(history: number[]): number[] {
-    if (!this.model || history.length < 10) return new Array(37).fill(0);
+    if (!this.isReady || !this.model || history.length < 10) return new Array(37).fill(0);
 
     try {
       return tf.tidy(() => {

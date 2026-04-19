@@ -181,11 +181,11 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       <div className="lg:col-span-12 mb-6">
         <div className="flex items-center justify-between px-4 py-2 bg-black/40 backdrop-blur-md border-b border-gold-primary/20 rounded-t-3xl">
           <div className="flex items-center gap-4">
-            <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/500</span>
+            <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/200</span>
             <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
-                animate={{ width: `${(history.length / 500) * 100}%` }}
+                animate={{ width: `${(history.length / 200) * 100}%` }}
                 className="h-full bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,0.5)]" 
               />
             </div>
@@ -211,11 +211,11 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
-                animate={{ width: `${(history.length / 500) * 100}%` }}
+                animate={{ width: `${(history.length / 200) * 100}%` }}
                 className="h-full bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,0.5)]" 
               />
             </div>
-            <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/500</span>
+            <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/200</span>
           </div>
         </div>
       </div>

@@ -426,16 +426,18 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [history, user]);
 
+  const totalNumbersAdded = React.useRef(0);
+
   // Train neural engine when history changes (Optimized)
   useEffect(() => {
-    if (history.length >= 25 && history.length % 5 === 0) {
+    if (history.length >= 25 && totalNumbersAdded.current % 5 === 0) {
       // Pequeno delay para garantir que a UI atualizou antes de começar o treino pesado
       const timer = setTimeout(() => {
         neuralEngine.train(history).catch(err => console.error("Neural training error:", err));
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [history.length]);
+  }, [history]);
 
   const addNumber = React.useCallback((num: number | number[]) => {
     // Validate input
@@ -444,13 +446,16 @@ export default function App() {
     if (Array.isArray(num)) {
       const validNums = num.filter(validate);
       if (validNums.length === 0) return;
+      totalNumbersAdded.current += validNums.length;
       setLastNumber(validNums[0]);
-      setHistory(prev => [...validNums, ...prev].slice(0, 500));
+      setHistory(prev => [...validNums, ...prev].slice(0, 200));
       toast.success(`${validNums.length} números adicionados ao histórico.`);
       return;
     }
 
     if (!validate(num)) return;
+    
+    totalNumbersAdded.current += 1;
 
     // Simulate haptic feedback
     if (window.navigator.vibrate) {
@@ -475,18 +480,19 @@ export default function App() {
         
         setCurrentDropPoint(null);
         setLastNumber(num);
-        setHistory(prev => [num, ...prev].slice(0, 500));
+        setHistory(prev => [num, ...prev].slice(0, 200));
         return;
       }
     }
 
     setLastNumber(num);
-    setHistory(prev => [num, ...prev].slice(0, 500));
+    setHistory(prev => [num, ...prev].slice(0, 200));
   }, [ballisticMode, currentDropPoint]);
 
   const clearHistory = React.useCallback(() => {
     setHistory([]);
     setDismissedAlerts([]);
+    totalNumbersAdded.current = 0;
   }, []);
 
   const removeLast = React.useCallback(() => {

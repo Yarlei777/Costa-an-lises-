@@ -34,7 +34,7 @@ const EstatisticasTab: React.FC<EstatisticasTabProps> = React.memo(({
   removeCustomRule,
   engineWeights
 }) => {
-  const displayHistory = React.useMemo(() => history.slice(0, 100), [history]);
+  const displayHistory = React.useMemo(() => history.slice(0, 200), [history]);
 
   return (
     <motion.div 
@@ -152,7 +152,7 @@ const EstatisticasTab: React.FC<EstatisticasTabProps> = React.memo(({
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
             <History className="w-4 h-4 text-gold-primary" />
-            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Histórico Expandido (500)</h2>
+            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-400">Histórico Expandido (200)</h2>
           </div>
           <div className="flex gap-2">
             <button onClick={removeLast} className="p-2 hover:bg-white/5 rounded-lg transition-colors text-zinc-500">
@@ -174,11 +174,6 @@ const EstatisticasTab: React.FC<EstatisticasTabProps> = React.memo(({
             </div>
           ))}
         </div>
-        {history.length > 100 && (
-          <div className="mt-4 text-center">
-            <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest">Mostrando apenas os últimos 100 giros para performance</p>
-          </div>
-        )}
       </section>
 
       {/* Custom Alert Configuration */}
