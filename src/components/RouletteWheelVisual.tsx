@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { RotateCcw, Trash2, Zap } from 'lucide-react';
-import { motion, useAnimation, AnimatePresence } from 'motion/react';
+import { RotateCcw, Trash2 } from 'lucide-react';
+import { motion, useAnimation } from 'motion/react';
 import { MIRROR_NUMBERS_LIST, ESPELHOS_CFG } from '../constants';
 
 interface RouletteWheelVisualProps {
@@ -13,7 +13,6 @@ interface RouletteWheelVisualProps {
   onClearHistory?: () => void;
   onRemoveLast?: () => void;
   lastNumber?: number | null;
-  showLightning?: boolean;
 }
 
 const LEFT_STRAIGHT = [35, 12, 28, 7, 29, 18, 22, 9, 31, 14, 20, 1, 33, 16, 24];
@@ -75,8 +74,9 @@ const RacetrackSegment: React.FC<{
   isOmega: boolean;
   color: string;
 }> = React.memo(({ num, path, textX, textY, textRotation = 0, isHighlighted, isContext, isVacuum, isMirror, isMainTarget, isOmega, color }) => {
+  const isActive = isHighlighted || isVacuum || isContext;
   return (
-    <g>
+    <g style={isActive ? { willChange: 'filter, brightness' } : undefined}>
       {/* Fatia do Número */}
       <path
         d={path}
@@ -132,8 +132,7 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
   isOmega = false,
   onClearHistory,
   onRemoveLast,
-  lastNumber = null,
-  showLightning = false
+  lastNumber = null
 }) => {
   const segments = React.useMemo(() => {
     // Add mirror counterparts to highlighted numbers
@@ -396,72 +395,6 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           <text x={CENTER_X} y={TOP_Y + 9 * ROW_HEIGHT} fill="#c084fc">Orphelins</text>
           <text x={CENTER_X} y={BOTTOM_Y + 10} fill="#facc15">Tier</text>
         </g>
-
-        {/* Green Lightning Bolt Effect */}
-        <AnimatePresence>
-          {showLightning && (
-            <motion.g
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0 }}
-              style={{ originX: `${CENTER_X}px`, originY: `${TOP_Y - 50}px` }}
-            >
-              <foreignObject 
-                x={CENTER_X - 60} 
-                y={TOP_Y - 140} 
-                width="120" 
-                height="120"
-              >
-                <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                  <motion.div
-                    animate={{ 
-                      scale: [1, 1.1, 1],
-                      filter: [
-                        'drop-shadow(0 0 10px #22c55e)',
-                        'drop-shadow(0 0 30px #22c55e)',
-                        'drop-shadow(0 0 10px #22c55e)'
-                      ]
-                    }}
-                    transition={{ repeat: Infinity, duration: 0.8 }}
-                    className="p-3 bg-green-500 rounded-2xl shadow-[0_0_30px_#22c55e] border-2 border-green-300/30"
-                  >
-                    <Zap className="w-12 h-12 text-black fill-black" strokeWidth={3} />
-                  </motion.div>
-                  
-                  <motion.div
-                    initial={{ y: 5, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    className="px-2 py-0.5 bg-green-500 rounded text-[9px] font-black text-black uppercase tracking-tighter"
-                  >
-                    Momento Ótimo
-                  </motion.div>
-                </div>
-              </foreignObject>
-              
-              {/* Electric arcs around the wheel */}
-              {[45, 135, 225, 315].map((angle, i) => {
-                const start = polarToCartesian(CENTER_X, (angle > 180 ? BOTTOM_Y : TOP_Y), OUTER_RADIUS + 5, angle);
-                const end = polarToCartesian(CENTER_X, (angle > 180 ? BOTTOM_Y : TOP_Y), OUTER_RADIUS + 15, angle + 10);
-                return (
-                  <motion.path
-                    key={i}
-                    d={`M ${start.x} ${start.y} Q ${CENTER_X} ${angle > 180 ? BOTTOM_Y : TOP_Y} ${end.x} ${end.y}`}
-                    stroke="#22c55e"
-                    strokeWidth="2"
-                    fill="none"
-                    animate={{
-                      opacity: [0, 1, 0],
-                      pathLength: [0, 1, 0],
-                      x: [0, Math.random() * 10 - 5, 0],
-                      y: [0, Math.random() * 10 - 5, 0]
-                    }}
-                    transition={{ repeat: Infinity, duration: 0.3, delay: i * 0.1 }}
-                  />
-                );
-              })}
-            </motion.g>
-          )}
-        </AnimatePresence>
       </svg>
     </div>
   );

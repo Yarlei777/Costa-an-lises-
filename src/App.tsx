@@ -45,8 +45,7 @@ import {
   MessageSquare,
   Star,
   Award,
-  ZapOff,
-  Camera
+  ZapOff
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -83,7 +82,6 @@ import {
 } from './constants';
 
 
-import { useRouletteStats } from './hooks/useRouletteStats';
 import { calculateSequence, calculateGaps, getSector, getSumOfDigits } from './utils/rouletteUtils';
 import { Toaster, toast } from 'sonner';
 import { Stats, CustomAlertRule, AlertType } from './types';
@@ -178,9 +176,6 @@ export default function App() {
     enabled: true
   });
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
-  const [consecutiveMisses, setConsecutiveMisses] = useState(0);
-  const [consecutiveNearHits, setConsecutiveNearHits] = useState(0);
-  const lastTargetsRef = React.useRef<number[]>([]);
   const [engineWeights, setEngineWeights] = useState({
     neural: 1.0,
     markov: 1.0,
@@ -190,6 +185,20 @@ export default function App() {
   });
   const [ballisticMode, setBallisticMode] = useState(false);
   const [currentDropPoint, setCurrentDropPoint] = useState<number | null>(null);
+  const [neuralProbs, setNeuralProbs] = useState<number[]>(new Array(37).fill(0));
+
+  // --- NEURAL PREDICTION UPDATER ---
+  useEffect(() => {
+    if (history.length >= 15) {
+      neuralEngine.predict(history).then(probs => {
+        if (Array.isArray(probs)) {
+          setNeuralProbs(probs);
+        }
+      }).catch(err => console.error("Neural prediction error:", err));
+    } else {
+      setNeuralProbs(new Array(37).fill(0));
+    }
+  }, [history.length]);
 
   // --- AUTOMATIC WEIGHT BALANCING (BRAIN ADAPTATION) ---
   useEffect(() => {
@@ -216,66 +225,70 @@ export default function App() {
 
       // Evaluate Neural Engine
       neuralEngine.predict(prevHistory).then(neuralProbs => {
-        const neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
-        
-        // Evaluate Markov
-        const prevLastNum = prevHistory[0];
-        const transitions: Record<number, number> = {};
-        const transitionHistory = prevHistory.slice(0, 50);
-        for (let i = 0; i < transitionHistory.length - 1; i++) {
-          if (transitionHistory[i+1] === prevLastNum) {
-            const next = transitionHistory[i];
-            transitions[next] = (transitions[next] || 0) + 1;
+        try {
+          const neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
+          
+          // Evaluate Markov
+          const prevLastNum = prevHistory[0];
+          const transitions: Record<number, number> = {};
+          const transitionHistory = prevHistory.slice(0, 50);
+          for (let i = 0; i < transitionHistory.length - 1; i++) {
+            if (transitionHistory[i+1] === prevLastNum) {
+              const next = transitionHistory[i];
+              transitions[next] = (transitions[next] || 0) + 1;
+            }
           }
+          const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
+          const markovHit = topMarkov && Number(topMarkov[0]) === lastNum;
+
+          // Adjust weights based on table behavior
+          setEngineWeights(prev => {
+            const newWeights = { ...prev };
+
+            // Decay weights towards 1.0 slowly to prevent them from getting stuck
+            newWeights.neural += (1.0 - newWeights.neural) * 0.05;
+            newWeights.markov += (1.0 - newWeights.markov) * 0.05;
+            newWeights.sector += (1.0 - newWeights.sector) * 0.05;
+            newWeights.bias += (1.0 - newWeights.bias) * 0.05;
+            newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
+
+            // 1. If table is very chaotic (high unique numbers), reduce Neural/Markov and increase Sector/Bias
+            if (chaos > 0.8) {
+              newWeights.neural = Math.max(0.5, newWeights.neural - 0.1);
+              newWeights.markov = Math.max(0.5, newWeights.markov - 0.1);
+              newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
+              newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
+              newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
+            } 
+            // 2. If table is repeating (low unique numbers), increase Neural/Markov
+            else if (chaos < 0.4) {
+              newWeights.neural = Math.min(2.0, newWeights.neural + 0.1);
+              newWeights.markov = Math.min(2.0, newWeights.markov + 0.1);
+              newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
+              newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
+              newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
+            }
+            // 3. If there is strong sector concentration, boost Sector weight
+            if (maxSectorCount >= 5) {
+              newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
+              newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
+            }
+
+            // 4. History length factor
+            if (history.length > 100) {
+              newWeights.markov = Math.min(newWeights.markov + 0.2, 1.8);
+              newWeights.neural = Math.min(newWeights.neural + 0.1, 1.8);
+            }
+
+            // 5. Apply dynamic hits/misses adjustments if applicable
+            newWeights.neural = Math.max(0.5, Math.min(2.0, newWeights.neural + (neuralHit ? 0.1 : -0.02)));
+            newWeights.markov = Math.max(0.5, Math.min(2.0, newWeights.markov + (markovHit ? 0.1 : -0.02)));
+
+            return newWeights;
+          });
+        } catch (innerErr) {
+          console.error("Error processing neural prediction results:", innerErr);
         }
-        const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
-        const markovHit = topMarkov && Number(topMarkov[0]) === lastNum;
-
-        // Adjust weights based on table behavior
-        setEngineWeights(prev => {
-          const newWeights = { ...prev };
-
-          // Decay weights towards 1.0 slowly to prevent them from getting stuck
-          newWeights.neural += (1.0 - newWeights.neural) * 0.05;
-          newWeights.markov += (1.0 - newWeights.markov) * 0.05;
-          newWeights.sector += (1.0 - newWeights.sector) * 0.05;
-          newWeights.bias += (1.0 - newWeights.bias) * 0.05;
-          newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
-
-          // 1. If table is very chaotic (high unique numbers), reduce Neural/Markov and increase Sector/Bias
-          if (chaos > 0.8) {
-            newWeights.neural = Math.max(0.5, newWeights.neural - 0.1);
-            newWeights.markov = Math.max(0.5, newWeights.markov - 0.1);
-            newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
-            newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
-            newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
-          } 
-          // 2. If table is repeating (low unique numbers), increase Neural/Markov
-          else if (chaos < 0.4) {
-            newWeights.neural = Math.min(2.0, newWeights.neural + 0.1);
-            newWeights.markov = Math.min(2.0, newWeights.markov + 0.1);
-            newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
-            newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
-            newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
-          }
-          // 3. If there is strong sector concentration, boost Sector weight
-          if (maxSectorCount >= 5) {
-            newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
-            newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
-          }
-
-          // 4. History length factor
-          if (history.length > 100) {
-            newWeights.markov = Math.min(newWeights.markov + 0.2, 1.8);
-            newWeights.neural = Math.min(newWeights.neural + 0.1, 1.8);
-          }
-
-          // 5. Apply dynamic hits/misses adjustments if applicable
-          newWeights.neural = Math.max(0.5, Math.min(2.0, newWeights.neural + (neuralHit ? 0.1 : -0.02)));
-          newWeights.markov = Math.max(0.5, Math.min(2.0, newWeights.markov + (markovHit ? 0.1 : -0.02)));
-
-          return newWeights;
-        });
       }).catch(err => console.error("Dynamic weight balancing error:", err));
     } else {
       // Adjust weights even without neural/markov evaluation for shorter history
@@ -390,7 +403,7 @@ export default function App() {
       // Pequeno delay para garantir que a UI atualizou antes de começar o treino pesado
       const timer = setTimeout(() => {
         neuralEngine.train(history).catch(err => console.error("Neural training error:", err));
-      }, 1500);
+      }, 2000);
       return () => clearTimeout(timer);
     }
   }, [history.length]);
@@ -473,65 +486,7 @@ export default function App() {
   };
 
   // Advanced Statistics & Prediction Engine (Ensemble Module)
-  const stats = useRouletteStats(history, engineWeights, ballisticMode, currentDropPoint);
-
-  // --- GREEN LIGHTNING LOGIC: TRACKING STRIKES ---
-  useEffect(() => {
-    if (history.length > 0 && lastTargetsRef.current.length > 0) {
-      const landed = history[0];
-      const targets = lastTargetsRef.current;
-
-      let isDirectHit = false;
-      let isNearHit = false;
-      let isTwoAway = false;
-
-      targets.forEach(t => {
-        if (t === landed) isDirectHit = true;
-        
-        const idx = WHEEL_ORDER.indexOf(t);
-        const neighbor1Idx = (idx - 1 + 37) % 37;
-        const neighbor2Idx = (idx + 1) % 37;
-        const twoAway1Idx = (idx - 2 + 37) % 37;
-        const twoAway2Idx = (idx + 2) % 37;
-
-        if (landed === WHEEL_ORDER[neighbor1Idx] || landed === WHEEL_ORDER[neighbor2Idx]) {
-          isNearHit = true;
-        }
-        if (landed === WHEEL_ORDER[twoAway1Idx] || landed === WHEEL_ORDER[twoAway2Idx]) {
-          isTwoAway = true;
-        }
-      });
-
-      // User Logic:
-      // "se bater do lado do alvo ainda funciona como ruim" (neighbor = miss)
-      // "se não bater do lado bater dois vizinhos do lado já já não conta como um só" (2-away = reset/not counting)
-      
-      if (isDirectHit) {
-        setConsecutiveMisses(0);
-        setConsecutiveNearHits(0);
-      } else if (isNearHit) {
-        setConsecutiveMisses(prev => prev + 1); // Near hit still counts as a "bad" result (miss)
-        setConsecutiveNearHits(prev => prev + 1); // But also increments the "near hit" specific streak
-      } else if (isTwoAway) {
-        // Two pockets away is neutral/drift - per user "não conta como um só", 
-        // we reset near hits but keep misses going? 
-        // Or reset both to signify a "new cycle" of positioning.
-        setConsecutiveNearHits(0);
-        setConsecutiveMisses(prev => prev + 1);
-      } else {
-        setConsecutiveMisses(prev => prev + 1);
-        setConsecutiveNearHits(0);
-      }
-    }
-
-    // Sync targets for next verification
-    if (stats?.prediction?.targets) {
-      lastTargetsRef.current = stats.prediction.targets;
-    }
-  }, [history, stats]);
-
-  /* --- Redundant Logic Removed ---
-  const _scrapped_useMemo = useMemo(() => {
+  const stats = useMemo(() => {
     if (history.length === 0) return null;
 
     const historyTotal = history.length;
@@ -554,51 +509,30 @@ export default function App() {
     const terminalFrequency: Record<number, number> = {};
     const contextTargets: number[] = [];
     
-    // Sector Analysis (Voisins, Tiers, Orphelins, Jeu Zero)
-    const sectorCounts = { voisins: 0, tiers: 0, orphelins: 0, jeuZero: 0 };
-    
-    // Last 50 frequency for Bar Chart
-    const last50 = history.slice(0, 50);
-    const freq50: Record<number, number> = {};
-    last50.forEach(n => freq50[n] = (freq50[n] || 0) + 1);
-    const barChartData = Array.from({ length: 37 }, (_, i) => ({
-      number: i,
-      frequency: freq50[i] || 0,
-      color: ROULETTE_NUMBERS[i].color === 'red' ? '#ef4444' : ROULETTE_NUMBERS[i].color === 'black' ? '#18181b' : '#22c55e'
-    }));
-
-    // Sector Trends (Last 100 divided into 10 blocks of 10)
-    const last100 = history.slice(0, 100);
-    const sectorTrends: { index: number; voisins: number; tiers: number; orphelins: number }[] = [];
+    // Sector Analysis Sets for faster lookup
     const voisinsSet = new Set(SECTORS.voisins);
     const tiersSet = new Set(SECTORS.tiers);
     const orphelinsSet = new Set(SECTORS.orphelins);
     const jeuZeroSet = new Set(SECTORS.jeuZero);
-
-    for (let i = 0; i < 10; i++) {
-      const block = last100.slice(i * 10, (i + 1) * 10);
-      if (block.length === 0) break;
-      const bCounts = { voisins: 0, tiers: 0, orphelins: 0 };
-      for (const n of block) {
-        if (typeof n !== 'number' || n < 0 || n > 36) continue;
-        if (voisinsSet.has(n)) bCounts.voisins++;
-        else if (tiersSet.has(n)) bCounts.tiers++;
-        else if (orphelinsSet.has(n)) bCounts.orphelins++;
-      }
-      sectorTrends.unshift({
-        index: 10 - i,
-        voisins: bCounts.voisins,
-        tiers: bCounts.tiers,
-        orphelins: bCounts.orphelins
-      });
-    }
-
-    const last200 = history.slice(0, 200);
-    const total200 = last200.length || 1;
-
-    last200.forEach((num) => {
+    
+    const sectorCounts = { voisins: 0, tiers: 0, orphelins: 0, jeuZero: 0 };
+    
+    // Process stats in a single pass up to 200 items (or full history if less)
+    const limit = Math.min(historyTotal, 200);
+    const last50 = history.slice(0, 50);
+    const freq50: Record<number, number> = {};
+    
+    for (let i = 0; i < limit; i++) {
+      const num = history[i];
       const data = ROULETTE_NUMBERS[num];
-      if (!data) return;
+      if (!data) continue;
+
+      // 1. Bar Chart Data (last 50)
+      if (i < 50) {
+        freq50[num] = (freq50[num] || 0) + 1;
+      }
+
+      // 2. Global Counts & Correlations (last 200)
       if (data.color === 'red') counts.red++;
       else if (data.color === 'black') counts.black++;
       else counts.green++;
@@ -607,7 +541,6 @@ export default function App() {
         if (data.isEven) counts.even++; else counts.odd++;
         if (data.isHigh) counts.high++; else counts.low++;
         
-        // Correlation Tracking
         if (data.color === 'red') {
           if (data.isEven) correlations.redEven++;
           else correlations.redOdd++;
@@ -641,6 +574,7 @@ export default function App() {
         else if (terminal === 2 || terminal === 5 || terminal === 8) counts.termGroup2++;
         else if (terminal === 3 || terminal === 6 || terminal === 9) counts.termGroup3++;
       }
+
       numberFrequency[num] = (numberFrequency[num] || 0) + 1;
       const terminal = num % 10;
       terminalFrequency[terminal] = (terminalFrequency[terminal] || 0) + 1;
@@ -650,7 +584,35 @@ export default function App() {
       else if (orphelinsSet.has(num)) sectorCounts.orphelins++;
       
       if (jeuZeroSet.has(num)) sectorCounts.jeuZero++;
-    });
+    }
+
+    const barChartData = Array.from({ length: 37 }, (_, i) => ({
+      number: i,
+      frequency: freq50[i] || 0,
+      color: ROULETTE_NUMBERS[i].color === 'red' ? '#ef4444' : ROULETTE_NUMBERS[i].color === 'black' ? '#18181b' : '#22c55e'
+    }));
+
+    // Sector Trends (Last 100 divided into 10 blocks of 10)
+    const sectorTrends: { index: number; voisins: number; tiers: number; orphelins: number }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const start = i * 10;
+      if (start >= historyTotal) break;
+      const bCounts = { voisins: 0, tiers: 0, orphelins: 0 };
+      for (let j = start; j < Math.min(start + 10, historyTotal); j++) {
+        const n = history[j];
+        if (voisinsSet.has(n)) bCounts.voisins++;
+        else if (tiersSet.has(n)) bCounts.tiers++;
+        else if (orphelinsSet.has(n)) bCounts.orphelins++;
+      }
+      sectorTrends.unshift({
+        index: 10 - i,
+        voisins: bCounts.voisins,
+        tiers: bCounts.tiers,
+        orphelins: bCounts.orphelins
+      });
+    }
+
+    const total200 = limit || 1;
 
     // --- BIAS DETECTION ENGINE ---
     const detectedBiases: { type: string; value: string; confidence: number }[] = [];
@@ -1981,6 +1943,31 @@ export default function App() {
       numberScores[neuralTopNum] *= 1.5; // 50% de bônus para convergência total
     }
 
+    // --- CAMADA 30: TRIPLE CONVERGENCE (MAX PRECISION OVERLAY) ---
+    const markovTop = history.length > 10 ? (() => {
+       const lastN = history[0];
+       const transitions: Record<number, number> = {};
+       for (let i = 0; i < history.length - 1; i++) {
+         if (history[i+1] === lastN) {
+           const next = history[i];
+           transitions[next] = (transitions[next] || 0) + 1;
+         }
+       }
+       const top = Object.entries(transitions).sort((a,b) => b[1]-a[1])[0];
+       return top ? Number(top[0]) : -1;
+    })() : -1;
+
+    if (markovTop === neuralTopNum && markovTop !== -1) {
+       numberScores[markovTop] += 400 * engineWeights.neural;
+       if (!detectedBiases.some(b => b.type === 'Super Convergência')) {
+         detectedBiases.push({
+           type: 'Super Convergência',
+           value: `Markov + Neural ➔ Número ${markovTop}`,
+           confidence: 99
+         });
+       }
+    }
+
     const sortedNumbers = numberScores
       .map((score, num) => ({ num, score }))
       .sort((a, b) => b.score - a.score);
@@ -1988,13 +1975,13 @@ export default function App() {
     const top8 = (sortedNumbers || []).slice(0, 8);
     
     // Normalize scores to percentages for UI
-    const maxPossibleScore = 1400; // Updated max for new Long Term layer
+    const maxPossibleScore = 1800; // Increased max for new convergence layer
     const targetsWithConfidence = top8.map(t => ({
       num: t.num,
       confidence: Math.min(Math.round((t.score / maxPossibleScore) * 100 * (1.2 - chaosIndex)), 99)
     }));
 
-    // --- CAMADA 18: SNIPER CONVERGENCE (MAX PRECISION) ---
+    // --- CAMADA 31: SNIPER CONVERGENCE (MAX PRECISION) ---
     const mainTarget = top8[0]?.num ?? 0;
     const mainScore = top8[0]?.score ?? 0;
     
@@ -2143,7 +2130,6 @@ export default function App() {
       systemStatus
     };
   }, [history, engineWeights, ballisticMode, neuralProbs, currentDropPoint]);
-  */
 
   const { highlightedNumbers, allCylinderTargets, vacuumNumbers, targetZone, isOmega } = useMemo(() => {
     if (!stats) return { highlightedNumbers: [], allCylinderTargets: [], vacuumNumbers: [], targetZone: "", isOmega: false };
@@ -2224,12 +2210,15 @@ export default function App() {
   useEffect(() => {
     if (history.length < 3) return;
     
+    // Dismiss previous toasts to avoid stacking and honor the "only 3 most recent" request
+    toast.dismiss();
+    
     // 1. Analyze confidence scores of all detected biases and prioritize alerts
     // for those with confidence greater than 85%.
     const highConfidenceBiases = stats?.biases?.filter(b => b.confidence > 85) || [];
     
     highConfidenceBiases.forEach(bias => {
-      const alertMsg = `${bias.value} (${bias.confidence}%)`;
+      const alertMsg = `⚠️ ALERTA: ${bias.type} - ${bias.value}`;
       // Check if this specific alert for this history length has already been shown
       const alertId = `bias-${bias.type}-${bias.value}-${history.length}`;
       
@@ -2238,13 +2227,13 @@ export default function App() {
         if (!isNotificationsMuted) {
           toast.success(alertMsg, {
             id: alertId,
-            duration: isImportant ? 15000 : 6000,
+            duration: 4000,
             style: {
               background: '#050505',
               border: `1px solid ${isImportant ? '#22c55e' : 'rgba(34, 197, 94, 0.2)'}`,
               color: '#fff',
               fontFamily: 'inherit',
-              fontSize: '10px',
+              fontSize: '11px',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               fontWeight: '900'
@@ -2338,20 +2327,20 @@ export default function App() {
       }
 
       if (triggered) {
-        const alertMsg = ruleLabel;
+        const alertMsg = `🎯 REGRA: ${ruleLabel}`;
         const alertId = `rule-${rule.id}-${history.length}`;
         
         if (!dismissedAlerts.includes(alertId)) {
           if (!isNotificationsMuted) {
             toast.success(alertMsg, {
               id: alertId,
-              duration: 10000,
+              duration: 4000,
               style: {
                 background: '#050505',
                 border: '1px solid #22c55e',
                 color: '#fff',
                 fontFamily: 'inherit',
-                fontSize: '10px',
+                fontSize: '11px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 fontWeight: '900'
@@ -2421,26 +2410,26 @@ export default function App() {
       <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-gold-primary/30 relative overflow-hidden" translate="no">
       {/* Toaster for notifications */}
       <Toaster 
-        position="bottom-right" 
+        position="top-right" 
         theme="dark" 
         richColors 
         closeButton 
+        visibleToasts={3}
+        expand={false}
+        gap={6}
         toastOptions={{
+          duration: 4000,
           style: {
             background: 'rgba(5, 5, 5, 0.95)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(191, 149, 63, 0.4)',
+            border: '1px solid rgba(212, 175, 55, 0.4)',
             color: '#fff',
             fontFamily: 'inherit',
-            fontSize: '10px',
+            fontSize: '11px',
             textTransform: 'uppercase',
-            letterSpacing: '0.1em',
+            letterSpacing: '0.05em',
             fontWeight: '900',
-            borderRadius: '0.5rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(191, 149, 63, 0.1)',
-            width: '180px',
-            minHeight: '60px',
-            padding: '12px'
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           }
         }}
       />
@@ -2461,28 +2450,6 @@ export default function App() {
           transition={{ duration: 0.8, ease: "easeInOut" }}
         />
         <AnimatePresence>
-          {(consecutiveMisses >= 2 || consecutiveNearHits >= 2) && stats && stats.prediction.confidence > 70 && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.5, y: -20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.5, y: -20 }}
-              className="fixed top-8 left-1/2 -translate-x-1/2 z-[101] flex flex-col items-center gap-1"
-            >
-              <motion.div 
-                className="bg-zinc-900/90 backdrop-blur-xl border-2 border-green-500/50 rounded-2xl px-6 py-3 flex items-center gap-4 shadow-2xl lightning-pulse"
-              >
-                <div className="bg-green-500 rounded-full p-2 shadow-[0_0_20px_#22c55e]">
-                  <Zap className="w-8 h-8 text-black fill-black" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-green-400 text-xs font-black tracking-widest uppercase">Raio de Execução</span>
-                  <span className="text-white text-lg font-black tracking-tight leading-none">HORA DE JOGAR</span>
-                </div>
-              </motion.div>
-              <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Aguardado convergência: {Math.max(consecutiveMisses, consecutiveNearHits)}º Ciclo</div>
-            </motion.div>
-          )}
-
           {(stats?.prediction?.confidence || 0) > 85 && (
             <motion.div 
               initial={{ opacity: 0, x: -50 }}
@@ -2724,6 +2691,7 @@ export default function App() {
                 addNumber={addNumber} 
                 removeLast={removeLast} 
                 clearHistory={clearHistory} 
+                engineWeights={engineWeights}
                 highlightedNumbers={highlightedNumbers}
                 vacuumNumbers={vacuumNumbers}
                 targetZone={targetZone}
@@ -2740,7 +2708,6 @@ export default function App() {
                   setBallisticMode(!ballisticMode);
                   setCurrentDropPoint(null);
                 }}
-                showLightning={(consecutiveMisses >= 2 || consecutiveNearHits >= 2) && stats && stats.prediction.confidence > 70}
               />
             </motion.div>
           </Suspense>
@@ -2866,6 +2833,10 @@ export default function App() {
             </button>
           </div>
           <div className="flex flex-col items-center gap-4">
+            <div className="flex items-center gap-2 opacity-30">
+              <ShieldCheck className="w-4 h-4" />
+              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Exu do Ouro Security Protocol</span>
+            </div>
             <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] font-bold">
               Algoritmo de Alta Frequência • Licença de Uso Profissional
             </p>

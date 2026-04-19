@@ -49,27 +49,6 @@ body {
   pointer-events: none;
 }
 
-.neon-green-shadow {
-  box-shadow: 0 0 20px rgba(34, 197, 94, 0.4), inset 0 0 10px rgba(34, 197, 94, 0.2);
-}
-
-.lightning-pulse {
-  animation: lightning-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes lightning-pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-    filter: drop-shadow(0 0 5px #22c55e);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.05);
-    filter: drop-shadow(0 0 25px #22c55e);
-  }
-}
-
 .gold-gradient {
   background: var(--gold-metallic);
 }

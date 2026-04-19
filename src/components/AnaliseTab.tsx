@@ -28,7 +28,7 @@ const AnaliseTab: React.FC<AnaliseTabProps> = React.memo(({ stats }) => {
       className="grid grid-cols-1 lg:grid-cols-12 gap-10"
     >
       {/* Left: Terminal Analysis */}
-      <div className="lg:col-span-7 space-y-10">
+      <div className="lg:col-span-7 space-y-10" style={{ contentVisibility: 'auto', containIntrinsicSize: '0 500px' }}>
         <section className="glass-card rounded-[2rem] p-8">
           <div className="flex items-center gap-3 mb-8">
             <Zap className="w-4 h-4 text-gold-primary" />

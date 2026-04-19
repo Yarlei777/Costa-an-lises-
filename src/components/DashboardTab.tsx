@@ -1,16 +1,16 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Activity, Target, Search, Loader2, ExternalLink, X, RotateCcw, Maximize2, Minimize2, Camera, Image as ImageIcon } from 'lucide-react';
+import { Zap, Activity, Target, Search, Loader2, ExternalLink, X, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { Stats, RouletteNumber } from '../types';
 import { COLORS, ROULETTE_NUMBERS, MIRROR_NUMBERS_LIST, ESPELHOS_CFG } from '../constants';
 import RouletteWheelVisual from './RouletteWheelVisual';
-import HistoryScanner from './HistoryScanner';
 
 interface DashboardTabProps {
   stats: Stats | null;
   history: number[];
   isOmega: boolean;
+  engineWeights: { neural: number; markov: number; sector: number; bias: number; shortTerm: number };
   highlightedNumbers: number[];
   vacuumNumbers: number[];
   targetZone: string;
@@ -27,15 +27,35 @@ interface DashboardTabProps {
   ballisticMode?: boolean;
   currentDropPoint?: number | null;
   onToggleBallisticMode?: () => void;
-  showLightning?: boolean;
 }
 
 const INPUT_NUMBERS = Array.from({ length: 37 }, (_, i) => i);
+
+const NumberButton = React.memo<{ num: number; onClick: (num: number) => void }>(({ num, onClick }) => (
+  <button 
+    onClick={() => onClick(num)} 
+    className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-black border border-white/10 transition-all hover:scale-110 active:scale-95 will-change-transform ${COLORS[ROULETTE_NUMBERS[num].color]}`}
+  >
+    {num}
+  </button>
+));
+
+const RecentNumberCard = React.memo<{ num: number; id: string }>(({ num, id }) => (
+  <motion.div
+    key={id}
+    initial={{ scale: 0.8, opacity: 0 }}
+    animate={{ scale: 1, opacity: 1 }}
+    className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-black border border-white/10 shadow-lg ${COLORS[ROULETTE_NUMBERS[num].color]}`}
+  >
+    {num}
+  </motion.div>
+));
 
 const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   stats,
   history,
   isOmega,
+  engineWeights,
   highlightedNumbers,
   vacuumNumbers,
   targetZone,
@@ -51,8 +71,7 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   onClearBrowser,
   ballisticMode,
   currentDropPoint,
-  onToggleBallisticMode,
-  showLightning = false
+  onToggleBallisticMode
 }) => {
   const [searchValue, setSearchValue] = React.useState('');
   const [isIframeLoading, setIsIframeLoading] = React.useState(false);
@@ -88,10 +107,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
     setIframeKey(prev => prev + 1);
     setIsIframeLoading(prev => !prev); // Toggle to trigger effect or just set to true
     setIsIframeLoading(true);
-  };
-
-  const handleNumbersDetected = (nums: number[]) => {
-    addNumber(nums);
   };
 
   const handleClearBrowser = () => {
@@ -130,25 +145,33 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       <div className="lg:col-span-12 mb-6">
         <div className="flex items-center justify-between px-4 py-2 bg-black/40 backdrop-blur-md border-b border-gold-primary/20 rounded-t-3xl">
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-3 px-3 py-1 bg-white/5 rounded-full border border-white/10">
-              {stats?.systemStatus && (
-                <>
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-1 h-1 rounded-full ${stats.systemStatus.neural === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
-                    <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Neural</span>
-                  </div>
-                  <div className="w-[1px] h-2 bg-white/10" />
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-1 h-1 rounded-full ${stats.systemStatus.markov === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
-                    <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Markov</span>
-                  </div>
-                  <div className="w-[1px] h-2 bg-white/10" />
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-1 h-1 rounded-full ${stats.systemStatus.bias === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
-                    <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Bias</span>
-                  </div>
-                </>
-              )}
+            {stats?.systemStatus && (
+              <div className="hidden md:flex items-center gap-3 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-1 h-1 rounded-full ${stats.systemStatus.neural === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
+                  <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Neural</span>
+                </div>
+                <div className="w-[1px] h-2 bg-white/10" />
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-1 h-1 rounded-full ${stats.systemStatus.markov === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
+                  <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Markov</span>
+                </div>
+                <div className="w-[1px] h-2 bg-white/10" />
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-1 h-1 rounded-full ${stats.systemStatus.bias === 'ONLINE' ? 'bg-emerald-500' : 'bg-gold-primary animate-pulse'}`} />
+                  <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Bias</span>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-4">
+              <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/500</span>
+              <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(history.length / 500) * 100}%` }}
+                  className="h-full bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,0.5)]" 
+                />
+              </div>
             </div>
           </div>
           
@@ -164,20 +187,28 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             )}
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: `${(history.length / 500) * 100}%` }}
-                className="h-full bg-gold-primary shadow-[0_0_10px_rgba(212,175,55,0.5)]" 
-              />
-            </div>
-            <span className="text-[10px] font-black text-gold-primary/60 tracking-widest">{history.length}/500</span>
+          <div className="flex items-center gap-4 opacity-0 pointer-events-none">
+            {/* Espaçador para manter o "Germinação" centralizado */}
+            <div className="w-24 h-1" />
+            <span className="text-[10px] tracking-widest">0/0</span>
           </div>
         </div>
       </div>
       {/* Layout de 3 Colunas para Desktop (Análise ao redor do Navegador) */}
       <div className="lg:col-span-3 space-y-6 order-2 lg:order-1">
+        {/* Cérebro Central - Removido conforme solicitação, já existe aba específica */}
+        <section className="glass-card rounded-[2rem] p-6">
+          <div className="flex flex-col items-center gap-4 py-4 text-center">
+            <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20">
+              <Zap className="w-6 h-6 text-emerald-500" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Sistema Ativo</p>
+              <p className="text-[8px] text-zinc-500 font-bold mt-1">Motores integrados em tempo real</p>
+            </div>
+          </div>
+        </section>
+
         {/* Monitor de Viés */}
         <section className="glass-card rounded-[2rem] p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -251,19 +282,12 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
           </div>
 
           {/* Recent Numbers Preview */}
-          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar" style={{ contain: 'content' }}>
             <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mr-2 whitespace-nowrap">Últimos:</span>
             {recentNumbers.length > 0 ? (
               <div className="flex gap-1.5">
                 {recentNumbers.map((num, idx) => (
-                  <motion.div
-                    key={`${num}-${history.length - idx}`}
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black border border-white/10 shadow-lg ${COLORS[ROULETTE_NUMBERS[num].color]}`}
-                  >
-                    {num}
-                  </motion.div>
+                  <RecentNumberCard key={`${num}-${history.length - idx}`} num={num} id={`${num}-${history.length - idx}`} />
                 ))}
               </div>
             ) : (
@@ -271,15 +295,12 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             )}
           </div>
 
-          <div className="grid grid-cols-6 sm:grid-cols-9 lg:grid-cols-12 gap-2">
+          <div className="grid grid-cols-6 sm:grid-cols-9 lg:grid-cols-12 gap-2" style={{ contain: 'content' }}>
             {INPUT_NUMBERS.map((num) => (
-              <button key={num} onClick={() => addNumber(num)} className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-black border border-white/10 transition-all hover:scale-110 ${COLORS[ROULETTE_NUMBERS[num].color]}`}>
-                {num}
-              </button>
+              <NumberButton key={num} num={num} onClick={addNumber} />
             ))}
           </div>
           <div className="mt-6 flex justify-center gap-4">
-            <HistoryScanner onNumbersDetected={handleNumbersDetected} />
             <button onClick={removeLast} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400">Desfazer</button>
             <button onClick={clearHistory} className="px-4 py-2 bg-red-500/5 border border-red-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-red-500">Limpar</button>
           </div>
@@ -295,7 +316,6 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             targetZone={targetZone} 
             isOmega={isOmega}
             lastNumber={lastNumber}
-            showLightning={showLightning}
           />
         </section>
 
