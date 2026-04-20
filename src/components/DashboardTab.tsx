@@ -191,9 +191,9 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
             </div>
           </div>
           
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center px-4">
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-black uppercase tracking-[0.8em] gold-text">Exu do Ouro</h1>
+              <h1 className="text-sm font-black uppercase tracking-[0.8em] gold-text">Costa Análises</h1>
               {history.length < 25 && (
                 <div className="group relative flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full animate-pulse cursor-help">
                   <div className="w-1 h-1 rounded-full bg-blue-500" />

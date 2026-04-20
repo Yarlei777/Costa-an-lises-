@@ -10,6 +10,7 @@
   --color-gold-accent: #B8860B;
   --color-gold-muted: rgba(212, 175, 55, 0.1);
   --color-obsidian-deep: #050505;
+  --animate-spin-slow: spin 8s linear infinite;
 }
 
 :root {

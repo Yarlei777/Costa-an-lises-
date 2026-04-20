@@ -151,7 +151,7 @@ const getSumOfDigits = (n: number): number => {
   return sum;
 };
 import { Toaster, toast } from 'sonner';
-import { Stats, CustomAlertRule, AlertType } from './types';
+import { Stats, CustomAlertRule, AlertType, TabType, Bias } from './types';
 import { neuralEngine } from './services/neuralEngine';
 import { auth, loginWithGoogle, logout, saveUserSession, getUserSession } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -224,8 +224,39 @@ const ALERT_CONFIG_TYPES = [
   { id: 'terminal', label: 'Terminal', values: Array.from({length: 10}, (_, i) => ({id: i.toString(), label: `T-${i}`})) },
 ];
 
+const RouletteIcon = ({ className = "w-8 h-8" }: { className?: string }) => (
+  <svg viewBox="0 0 100 100" className={className}>
+    <circle cx="50" cy="50" r="48" fill="#0c0a09" stroke="#D4AF37" strokeWidth="2" />
+    {[...Array(37)].map((_, i) => {
+      const angle = (i * 360) / 37;
+      const nextAngle = ((i + 1) * 360) / 37;
+      const x1 = 50 + 42 * Math.cos((angle * Math.PI) / 180);
+      const y1 = 50 + 42 * Math.sin((angle * Math.PI) / 180);
+      const x2 = 50 + 42 * Math.cos((nextAngle * Math.PI) / 180);
+      const y2 = 50 + 42 * Math.sin((nextAngle * Math.PI) / 180);
+      
+      let color = "#000000";
+      if (i === 0) color = "#16a34a"; // Green 0
+      else if ([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36].includes(i)) color = "#ef4444"; // Red
+      
+      return (
+        <path
+          key={i}
+          d={`M 50 50 L ${x1} ${y1} A 42 42 0 0 1 ${x2} ${y2} Z`}
+          fill={color}
+          stroke="#D4AF37"
+          strokeWidth="0.2"
+        />
+      );
+    })}
+    <circle cx="50" cy="50" r="12" fill="#D4AF37" />
+    <circle cx="50" cy="50" r="4" fill="#fff" />
+  </svg>
+);
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<TabType | string>('DASHBOARD');
+  const [notificationLog, setNotificationLog] = useState<{ id: string; bias: Bias; spinIndex: number; timestamp: number; isImportant: boolean }[]>([]);
   const [legalModal, setLegalModal] = useState<{ open: boolean; type: 'terms' | 'privacy' }>({ open: false, type: 'terms' });
   const [history, setHistory] = useState<number[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -258,8 +289,9 @@ export default function App() {
     if (history.length < 10) return;
 
     // Calculate Chaos Index (Volatility)
-    const unique15 = new Set(history.slice(0, 15)).size;
-    const chaos = unique15 / 15;
+    const last20 = history.slice(0, 20);
+    const unique20 = new Set(last20).size;
+    const chaos = unique20 / 20;
 
     // Calculate Sector Concentration
     const last10 = history.slice(0, 10);
@@ -272,76 +304,57 @@ export default function App() {
     });
     const maxSectorCount = Math.max(...Object.values(sectorCounts));
 
-    // Evaluate Neural Engine and Markov if history is long enough
+    // Evaluate Engine Performance (Backtest)
     let neuralHit = false;
     let markovHit = false;
+    let sectorHit = false;
 
-    if (history.length >= 20) {
-      const lastNum = history[0];
-      const prevHistory = history.slice(1, 101); // Limit to last 100 for evaluation
+    if (history.length >= 15) {
+      const actual = history[0];
+      const prevHist = history.slice(1);
+      
+      // 1. Neural Eval
+      const nProbs = neuralEngine.predict(prevHist);
+      const topN = nProbs.map((p, i) => ({i, p})).sort((a,b) => b.p - a.p).slice(0, 5).map(x => x.i);
+      neuralHit = topN.includes(actual);
 
-      // Evaluate Neural Engine
-      const neuralProbs = neuralEngine.predict(prevHistory);
-      neuralHit = neuralProbs.indexOf(Math.max(...neuralProbs)) === lastNum;
-
-      // Evaluate Markov
-      const prevLastNum = prevHistory[0];
-      const transitions: Record<number, number> = {};
-      const transitionHistory = prevHistory.slice(0, 50);
-      for (let i = 0; i < transitionHistory.length - 1; i++) {
-        if (transitionHistory[i+1] === prevLastNum) {
-          const next = transitionHistory[i];
-          transitions[next] = (transitions[next] || 0) + 1;
-        }
-      }
-      const topMarkov = Object.entries(transitions).sort((a, b) => b[1] - a[1])[0];
-      if (topMarkov && Number(topMarkov[0]) === lastNum) markovHit = true;
+      // 2. Sector Eval
+      const lastIdx = WHEEL_ORDER.indexOf(prevHist[0]);
+      const actualIdx = WHEEL_ORDER.indexOf(actual);
+      const dist = (actualIdx - lastIdx + 37) % 37;
+      const prevDist = (WHEEL_ORDER.indexOf(prevHist[0]) - WHEEL_ORDER.indexOf(prevHist[1]) + 37) % 37;
+      if (Math.abs(dist - prevDist) <= 2) sectorHit = true;
     }
 
     // Adjust weights based on table behavior
     setEngineWeights(prev => {
       const newWeights = { ...prev };
 
-      // Decay weights towards 1.0 slowly to prevent them from getting stuck
+      // Slow decay towards baseline
       newWeights.neural += (1.0 - newWeights.neural) * 0.05;
       newWeights.markov += (1.0 - newWeights.markov) * 0.05;
       newWeights.sector += (1.0 - newWeights.sector) * 0.05;
       newWeights.bias += (1.0 - newWeights.bias) * 0.05;
       newWeights.shortTerm += (1.0 - newWeights.shortTerm) * 0.05;
 
-      // 1. If table is very chaotic (high unique numbers), reduce Neural/Markov and increase Sector/Bias
-      if (chaos > 0.8) {
-        newWeights.neural = Math.max(0.5, newWeights.neural - 0.1);
-        newWeights.markov = Math.max(0.5, newWeights.markov - 0.1);
-        newWeights.sector = Math.min(2.0, newWeights.sector + 0.1);
-        newWeights.bias = Math.min(2.0, newWeights.bias + 0.1);
-        newWeights.shortTerm = Math.min(2.0, newWeights.shortTerm + 0.1);
-      } 
-      // 2. If table is repeating (low unique numbers), increase Neural/Markov
-      else if (chaos < 0.4) {
-        newWeights.neural = Math.min(2.0, newWeights.neural + 0.1);
-        newWeights.markov = Math.min(2.0, newWeights.markov + 0.1);
-        newWeights.sector = Math.max(0.5, newWeights.sector - 0.1);
-        newWeights.bias = Math.max(0.5, newWeights.bias - 0.1);
-        newWeights.shortTerm = Math.max(0.5, newWeights.shortTerm - 0.1);
-      }
-      // 3. If there is strong sector concentration, boost Sector weight
-      if (maxSectorCount >= 5) {
-        newWeights.sector = Math.min(newWeights.sector + 0.3, 2.0);
-        newWeights.shortTerm = Math.min(newWeights.shortTerm + 0.2, 1.8);
+      // Chaos Filter (Inconstancy)
+      if (chaos > 0.75) {
+        newWeights.neural *= 0.8; // Patterns are breaking
+        newWeights.bias *= 1.25;  // Trust physical bias (vacuum/delayed)
+        newWeights.sector *= 0.9;
+      } else if (chaos < 0.45) {
+        newWeights.neural *= 1.3; // Stable table, neural works best
+        newWeights.markov *= 1.2;
       }
 
-      // 4. History length factor
-      if (history.length > 100) {
-        newWeights.markov = Math.min(newWeights.markov + 0.2, 1.8);
-        newWeights.neural = Math.min(newWeights.neural + 0.1, 1.8);
-      }
+      // Momentum adjustment
+      if (neuralHit) newWeights.neural = Math.min(newWeights.neural + 0.15, 2.5);
+      else newWeights.neural = Math.max(newWeights.neural - 0.05, 0.5);
 
-      // 5. Apply dynamic hits/misses adjustments if applicable
-      if (history.length >= 20) {
-        newWeights.neural = Math.max(0.5, Math.min(2.0, newWeights.neural + (neuralHit ? 0.1 : -0.02)));
-        newWeights.markov = Math.max(0.5, Math.min(2.0, newWeights.markov + (markovHit ? 0.1 : -0.02)));
-      }
+      if (sectorHit) newWeights.sector = Math.min(newWeights.sector + 0.2, 2.5);
+      else newWeights.sector = Math.max(newWeights.sector - 0.05, 0.5);
+
+      if (maxSectorCount >= 5) newWeights.sector = Math.min(newWeights.sector + 0.1, 2.0);
 
       return newWeights;
     });
@@ -542,7 +555,15 @@ export default function App() {
 
     const numberFrequency: Record<number, number> = {};
     const terminalFrequency: Record<number, number> = {};
+    const numberScores = new Array(37).fill(0);
     const contextTargets: number[] = [];
+
+    // --- CAMADA 19: CHAOS INDEX (VOLATILIDADE) ---
+    const chaosIndex = (() => {
+      if (history.length < 10) return 0.5;
+      const uniqueNums = new Set(history.slice(0, 15)).size;
+      return uniqueNums / 15; // 1.0 = Caos total, 0.1 = Padrão repetitivo
+    })();
     
     // Sector Analysis (Voisins, Tiers, Orphelins, Jeu Zero)
     const sectorCounts = { voisins: 0, tiers: 0, orphelins: 0, jeuZero: 0 };
@@ -838,31 +859,155 @@ export default function App() {
           confidence: 90
         });
       }
+    }
 
-      // Padrão de Escada (Diagonal no Layout)
-      let isDiagonal = true;
-      for (let i = 0; i < 3; i++) {
-        if (history[i] === 0 || history[i+1] === 0) { isDiagonal = false; break; }
-        const r1 = (history[i] - 1) % 3;
-        const r2 = (history[i+1] - 1) % 3;
-        const c1 = Math.floor((history[i] - 1) / 3);
-        const c2 = Math.floor((history[i+1] - 1) / 3);
-        if (Math.abs(r1 - r2) !== 1 || Math.abs(c1 - c2) !== 1) {
-          isDiagonal = false;
-          break;
-        }
+    // 6. Matriz de Co-ocorrência (Magnet Numbers)
+    if (history.length >= 30) {
+      const coMap: Record<number, number[]> = {};
+      const last30 = history.slice(0, 30);
+      for (let i = 0; i < last30.length - 1; i++) {
+        const a = last30[i+1];
+        const b = last30[i];
+        if (!coMap[a]) coMap[a] = [];
+        coMap[a].push(b);
       }
-      if (isDiagonal) {
-        detectedBiases.push({
-          type: 'Padrão Visual',
-          value: 'Escada Diagonal',
-          confidence: 95
-        });
+      const activeMagnet = history[0];
+      if (coMap[activeMagnet]) {
+        const friends = coMap[activeMagnet];
+        const counts: Record<number, number> = {};
+        friends.forEach(f => counts[f] = (counts[f] || 0) + 1);
+        const bestFriend = Object.entries(counts).sort((a,b) => b[1] - a[1])[0];
+        if (bestFriend && bestFriend[1] >= 2) {
+          detectedBiases.push({
+            type: 'Magnetismo',
+            value: `${activeMagnet} atrai ${bestFriend[0]}`,
+            confidence: 85
+          });
+          numberScores[Number(bestFriend[0])] += 150 * engineWeights.bias;
+        }
       }
     }
 
-    // --- ENSEMBLE PREDICTION ENGINE (V2) ---
-    const numberScores = new Array(37).fill(0);
+    // 7. Alerta Zero Magnet
+    const zeroGap = history.indexOf(0);
+    if (zeroGap > 36 || zeroGap === -1) {
+      detectedBiases.push({
+        type: 'Zero Magnet',
+        value: `Zero ausente há ${zeroGap === -1 ? history.length : zeroGap} rodadas`,
+        confidence: 90
+      });
+      [0, 32, 15, 26, 3, 35, 12].forEach(n => numberScores[n] += 100 * engineWeights.bias);
+    }
+
+    // 8. Crupiê Dinâmico (Momentum Shift)
+    if (history.length >= 6) {
+      const distances: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const curIdx = WHEEL_ORDER.indexOf(history[i]);
+        const prevIdx = WHEEL_ORDER.indexOf(history[i+1]);
+        let d = (curIdx - prevIdx + 37) % 37;
+        distances.push(d);
+      }
+      const lastDist = distances[0];
+      const avgPrevDist = (distances[1] + distances[2] + distances[3] + distances[4]) / 4;
+      const shift = Math.abs(lastDist - avgPrevDist);
+      
+      if (shift > 10) {
+        detectedBiases.push({
+          type: 'Crupiê',
+          value: 'Mudança de Força (Giro Alterado)',
+          confidence: 88
+        });
+        engineWeights.sector += 0.3;
+      }
+    }
+
+    // 9. Saturação de Trios (Transbordamento)
+    const last12 = history.slice(0, 12);
+    const sectorFrequencies = {
+      voisins: last12.filter(n => SECTORS.voisins.includes(n)).length,
+      tiers: last12.filter(n => SECTORS.tiers.includes(n)).length,
+      orphelins: last12.filter(n => SECTORS.orphelins.includes(n)).length
+    };
+    Object.entries(sectorFrequencies).forEach(([sec, freq]) => {
+      if (freq >= 8) {
+        const targets = sec === 'tiers' ? SECTORS.orphelins : sec === 'voisins' ? SECTORS.tiers : SECTORS.voisins;
+        targets.forEach(n => numberScores[n] += 120 * engineWeights.sector);
+        detectedBiases.push({
+          type: 'Saturação',
+          value: `Transbordamento ${sec.toUpperCase()}`,
+          confidence: 92
+        });
+      }
+    });
+
+    // 10. Indexed Pattern Matcher (Local Memory)
+    if (history.length >= 25) {
+      const currentPattern = history.slice(0, 3).join(',');
+      const patternCounters: Record<number, number> = {};
+      for (let i = 0; i < history.length - 4; i++) {
+        const histPattern = history.slice(i+1, i+4).join(',');
+        if (histPattern === currentPattern) {
+          const next = history[i];
+          patternCounters[next] = (patternCounters[next] || 0) + 1;
+        }
+      }
+      const bestMatch = Object.entries(patternCounters).sort((a,b) => b[1] - a[1])[0];
+      if (bestMatch && bestMatch[1] >= 1) {
+        detectedBiases.push({
+          type: 'Sequência Histórica',
+          value: `Repetição Local: [${currentPattern}] -> ${bestMatch[0]}`,
+          confidence: 85 + (bestMatch[1] * 5)
+        });
+        numberScores[Number(bestMatch[0])] += 200 * engineWeights.bias;
+      }
+    }
+
+    // 11. Convergência da Proporção Áurea (Phi Spacing)
+    if (history.length >= 10) {
+      const phi = 1.618;
+      const lastNums = history.slice(0, 5);
+      const wheelPositions = lastNums.map(n => WHEEL_ORDER.indexOf(n));
+      const positionDiffs = [];
+      for (let i = 0; i < wheelPositions.length - 1; i++) {
+        positionDiffs.push(Math.abs(wheelPositions[i] - wheelPositions[i+1]));
+      }
+      const ratio = positionDiffs[0] / (positionDiffs[1] || 1);
+      if (Math.abs(ratio - phi) < 0.2 || Math.abs(ratio - (1/phi)) < 0.2) {
+        detectedBiases.push({
+          type: 'Geometria',
+          value: 'Sequência Áurea Detectada',
+          confidence: 89
+        });
+        // Boost neighbors of current sector
+        const curIdx = WHEEL_ORDER.indexOf(history[0]);
+        for (let offset = -4; offset <= 4; offset++) {
+          const idx = (curIdx + offset + 37) % 37;
+          numberScores[WHEEL_ORDER[idx]] += 80 * engineWeights.sector;
+        }
+      }
+    }
+
+    // 12. Decaimento Probabilístico (Poisson Anomaly)
+    for (let i = 0; i <= 36; i++) {
+      const gap = history.indexOf(i);
+      if (gap > 72) { // 2x o esperado de 37
+        const decayBoost = Math.min((gap - 72) * 2, 100);
+        numberScores[i] += decayBoost * engineWeights.bias;
+      }
+    }
+
+    // Funções utilitárias de cilindro
+    const getNeighbors = (n: number) => {
+      const idx = WHEEL_ORDER.indexOf(n);
+      return [
+        WHEEL_ORDER[(idx - 1 + 37) % 37],
+        n,
+        WHEEL_ORDER[(idx + 1) % 37]
+      ];
+    };
+
+    // --- ENSEMBLE PREDICTION ENGINE (V3 - HYPER PRECISION) ---
     let scores = new Array(10).fill(0); // Scores para terminais 0-9
     
     // --- CAMADA 1: ANÁLISE DE FAMÍLIAS (1.4.7) ---
@@ -918,7 +1063,7 @@ export default function App() {
       });
     }
 
-    // --- CAMADA EXTRA: ANÁLISE DE CAMUFLADOS (Soma de Dígitos) ---
+    // --- CAMADA 3: ANÁLISE DE CAMUFLADOS (Soma de Dígitos) ---
     if (history.length >= 2) {
       const lastNums = history.slice(0, 3); // Analisa os últimos 3 para convergência
       const camufladosInHistory = lastNums.filter(n => CAMUFLADOS_NUMBERS.includes(n));
@@ -954,7 +1099,7 @@ export default function App() {
       });
     }
 
-    // --- CAMADA 3: ANÁLISE DE CALOR E MOMENTUM (MELHORIA) ---
+    // --- CAMADA 4: ANÁLISE DE CALOR E MOMENTUM (MELHORIA) ---
     // Identifica terminais "quentes" nas últimas 15 rodadas
     const last15 = (history || []).slice(0, 15);
     for (let i = 0; i < 10; i++) {
@@ -997,7 +1142,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 4: MOMENTUM DE VIZINHANÇA (OPTIMIZED) ---
+    // --- CAMADA 5: MOMENTUM DE VIZINHANÇA (OPTIMIZED) ---
     const last10Momentum = history.slice(0, 10);
     const last10Set = new Set(last10Momentum);
     
@@ -1068,13 +1213,21 @@ export default function App() {
       }
     });
 
-    // --- CAMADA 5: NEURAL ENGINE (TENSORFLOW) ---
+    // Mescla scores iniciais dos terminais
+    for (let i = 0; i <= 36; i++) {
+      numberScores[i] += scores[i % 10];
+    }
+    
+    // Zera scores para capturar BIASES AVANÇADOS separadamente
+    let advancedScores = new Array(10).fill(0);
+
+    // --- CAMADA 6: NEURAL ENGINE (TENSORFLOW) ---
     const neuralProbs = neuralEngine.predict(history);
     neuralProbs.forEach((prob, num) => {
       numberScores[num] += prob * 180 * engineWeights.neural; // Dynamic weight
     });
 
-    // --- CAMADA 6: MARKOV CHAIN (TRANSITIONS) ---
+    // --- CAMADA 7: MARKOV CHAIN (TRANSITIONS) ---
     if (history.length > 10) {
       const lastNum = history[0];
       const transitions: Record<number, number> = {};
@@ -1089,7 +1242,7 @@ export default function App() {
       });
     }
 
-    // --- CAMADA 7: SECTOR VELOCITY & MOMENTUM ---
+    // --- CAMADA 8: SECTOR VELOCITY & MOMENTUM ---
     const recentSectorCounts: Record<string, number> = {};
     for (let i = 0; i < Math.min(history.length, 5); i++) {
       const s = getSector(history[i]);
@@ -1104,7 +1257,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 8: VIZINHOS HISTÓRICOS (TEMPORAIS) ---
+    // --- CAMADA 9: VIZINHOS HISTÓRICOS (TEMPORAIS) ---
     if (history.length > 2) {
       const currentNum = history[0];
       const historicalNeighbors: Record<number, number> = {};
@@ -1118,16 +1271,14 @@ export default function App() {
           if (after !== undefined) historicalNeighbors[after] = (historicalNeighbors[after] || 0) + 1;
         }
       }
-      
       Object.entries(historicalNeighbors).forEach(([num, count]) => {
         const n = Number(num);
-        if (count >= 2) {
-          contextTargets.push(n);
-        }
+        numberScores[n] += count * 35 * engineWeights.bias;
+        if (count >= 2) contextTargets.push(n);
       });
     }
 
-    // --- CAMADA 9: VÁCUO RECORRENTE (GAP ANALYSIS) ---
+    // --- CAMADA 10: VÁCUO RECORRENTE (GAP ANALYSIS) ---
     // Análise para Terminais (0-9)
     for (let t = 0; t < 10; t++) {
       const terminalNums = Array.from({length: 37}, (_, i) => i).filter(n => n % 10 === t);
@@ -1137,16 +1288,30 @@ export default function App() {
         const lastCompletedGap = pastGaps[pastGaps.length - 1];
         const currentOngoingGap = history.findIndex(n => terminalNums.includes(n));
         
-        // Se o vácuo atual está chegando perto ou é igual ao último vácuo
         if (currentOngoingGap !== -1 && currentOngoingGap >= lastCompletedGap - 1 && currentOngoingGap <= lastCompletedGap + 1 && lastCompletedGap > 0) {
-          scores[t] += 45 * engineWeights.bias;
-          
+          advancedScores[t] += 45 * engineWeights.bias;
+          for (let i = 0; i <= 36; i++) {
+            if (i % 10 === t) numberScores[i] += 45 * engineWeights.bias;
+          }
           detectedBiases.push({
             type: 'Vácuo Recorrente',
             value: `Terminal ${t} (Gap ${lastCompletedGap})`,
             confidence: currentOngoingGap === lastCompletedGap ? 95 : 85
           });
         }
+      }
+    }
+
+    // Mescla scores dos terminais detectados nas camadas avançadas
+    for (let i = 0; i <= 36; i++) {
+      numberScores[i] += advancedScores[i % 10];
+    }
+
+    // --- CAMADA 11: NEURO-FUSION (OMEGA BOOST) ---
+    const meanScore = numberScores.reduce((a, b) => a + b, 0) / 37;
+    for (let i = 0; i <= 36; i++) {
+      if (numberScores[i] > meanScore * 1.8) {
+        numberScores[i] *= 1.35; 
       }
     }
 
@@ -1160,7 +1325,12 @@ export default function App() {
         const currentOngoingGap = history.findIndex(n => familyNums.includes(n));
         
         if (currentOngoingGap !== -1 && currentOngoingGap >= lastCompletedGap - 1 && currentOngoingGap <= lastCompletedGap + 1 && lastCompletedGap > 0) {
-          terminals.forEach(t => scores[t] += 50 * engineWeights.bias);
+          terminals.forEach(t => {
+            advancedScores[t] += 50 * engineWeights.bias;
+            for (let i = 0; i <= 36; i++) {
+              if (i % 10 === t) numberScores[i] += 50 * engineWeights.bias;
+            }
+          });
           
           detectedBiases.push({
             type: 'Vácuo Recorrente',
@@ -1171,21 +1341,21 @@ export default function App() {
       }
     });
 
-    // --- CAMADA 10: SEQUENCE ANALYSIS ---
+    // --- CAMADA 12: SEQUENCE ANALYSIS ---
     const sequences = {
       color: calculateSequence(history, n => ROULETTE_NUMBERS[n].color === 'red', 'red', 'black'),
       parity: calculateSequence(history, n => ROULETTE_NUMBERS[n].isEven, 'even', 'odd'),
       highLow: calculateSequence(history, n => ROULETTE_NUMBERS[n].isHigh, 'high', 'low')
     };
 
-    // --- CAMADA 11: TABLE HEATMAP ---
+    // --- CAMADA 13: TABLE HEATMAP ---
     const tableHeatmap = Array.from({ length: 37 }, (_, i) => ({
       num: i,
       frequency: numberFrequency[i] || 0,
       color: ROULETTE_NUMBERS[i].color
     }));
 
-    // --- CAMADA 12: HISTORICAL GAP PATTERN (INDIVIDUAL NUMBERS) ---
+    // --- CAMADA 14: HISTORICAL GAP PATTERN (INDIVIDUAL NUMBERS) ---
     for (let i = 0; i <= 36; i++) {
       const gaps = calculateGaps(history, [i]);
       if (gaps.length >= 2) {
@@ -1209,7 +1379,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 13: DEALER SIGNATURE (ASSINATURA DO CRUPIÊ) ---
+    // --- CAMADA 15: DEALER SIGNATURE (ASSINATURA DO CRUPIÊ) ---
     if (history.length >= 5) {
       const distances: number[] = [];
       for (let i = 0; i < 4; i++) {
@@ -1243,7 +1413,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 13.5: BALLISTIC MODE (PONTO DE SOLTURA) ---
+    // --- CAMADA 16: BALLISTIC MODE (PONTO DE SOLTURA) ---
     // If ballistic mode is active and we have a drop point waiting, we predict based on historical distances.
     // Since we don't have a complex history object with drop points yet, we'll use the basic dealer signature
     // average distance calculated above, but applied to the *currentDropPoint* instead of the last landed number.
@@ -1287,7 +1457,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 14: Z-SCORE (DESVIO PADRÃO ESTATÍSTICO) ---
+    // --- CAMADA 17: Z-SCORE (DESVIO PADRÃO ESTATÍSTICO) ---
     const expectedFreq = history.length / 37;
     const terminalExpectedFreq = history.length / 10;
     
@@ -1306,7 +1476,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 15: CLUSTER ANALYSIS (VIZINHOS DE QUEDA) ---
+    // --- CAMADA 18: CLUSTER ANALYSIS (VIZINHOS DE QUEDA) ---
     const recentHits = history.slice(0, 8);
     const sectorHits: Record<string, number> = { VOISINS: 0, TIERS: 0, ORPHELINS: 0, JEUZERO: 0 };
     
@@ -1329,14 +1499,7 @@ export default function App() {
       }
     });
 
-    // --- CAMADA 16: CHAOS INDEX (VOLATILIDADE) ---
-    const chaosIndex = (() => {
-      if (history.length < 10) return 0.5;
-      const uniqueNums = new Set(history.slice(0, 15)).size;
-      return uniqueNums / 15; // 1.0 = Caos total, 0.1 = Padrão repetitivo
-    })();
-
-    // --- CAMADA 17: DYNAMIC CROSS-TERMINAL CONVERGENCE (HISTORICAL ANALYSIS) ---
+    // --- CAMADA 20: DYNAMIC CROSS-TERMINAL CONVERGENCE (HISTORICAL ANALYSIS) ---
     if (history.length >= 5) {
       const currentTerminal = history[0] % 10;
       const nextTerminalCounts: Record<number, number> = {};
@@ -1363,10 +1526,12 @@ export default function App() {
         }
       });
 
-      // Se o terminal atual tem um histórico de chamar um terminal específico (incluindo ele mesmo)
       if (maxCount >= 2) {
         bestNextTerminals.forEach(t => {
-          scores[t] += 120 * engineWeights.bias; // Bônus forte para convergência histórica
+          advancedScores[t] += 120 * engineWeights.bias; 
+          for (let i = 0; i <= 36; i++) {
+            if (i % 10 === t) numberScores[i] += 120 * engineWeights.bias;
+          }
         });
         
         detectedBiases.push({
@@ -1387,13 +1552,16 @@ export default function App() {
         if (terminalCalls[prevT]?.includes(currentTerminal)) {
           const nextPossible = terminalCalls[currentTerminal] || [];
           nextPossible.forEach(t => {
-            scores[t] += 35 * engineWeights.bias;
+            advancedScores[t] += 35 * engineWeights.bias;
+            for (let i = 0; i <= 36; i++) {
+              if (i % 10 === t) numberScores[i] += 35 * engineWeights.bias;
+            }
           });
         }
       }
     }
 
-    // --- CAMADA 18: APPROXIMATION ENGINE (BUSCA DE TERMINAL POR VIZINHOS) ---
+    // --- CAMADA 21: APPROXIMATION ENGINE (BUSCA DE TERMINAL POR VIZINHOS) ---
     if (history.length >= 10) {
       const scanLength = Math.min(30, history.length);
       const recentSpins = history.slice(0, scanLength); // Analisa até os últimos 30 giros
@@ -1442,7 +1610,7 @@ export default function App() {
       });
     }
 
-    // --- CAMADA 19: SHORT-TERM CONVERGENCE (LAST 10) ---
+    // --- CAMADA 22: SHORT-TERM CONVERGENCE (LAST 10) ---
     const last10Convergence = history.slice(0, 10);
     if (last10Convergence.length >= 5) {
       const shortTermCounts: Record<number, number> = {};
@@ -1500,7 +1668,7 @@ export default function App() {
       });
     }
 
-    // --- CAMADA 20: LEI DO TERCEIRO (LAW OF THE THIRDS) ---
+    // --- CAMADA 23: LEI DO TERCEIRO (LAW OF THE THIRDS) ---
     if (history.length >= 37) {
       const last37 = history.slice(0, 37);
       const thirdsCounts: Record<number, number> = {};
@@ -1550,7 +1718,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 21: PADRÃO DE PÊNDULO (PENDULUM STRIKE) ---
+    // --- CAMADA 24: PADRÃO DE PÊNDULO (PENDULUM STRIKE) ---
     if (history.length >= 3) {
       const getDistance = (n1: number, n2: number) => {
         const idx1 = WHEEL_ORDER.indexOf(n1);
@@ -1594,7 +1762,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 22: GEOMETRIA DE MESA (DÚZIAS E COLUNAS) ---
+    // --- CAMADA 25: GEOMETRIA DE MESA (DÚZIAS E COLUNAS) ---
     if (history.length >= 5) {
       const getDozen = (n: number) => n === 0 ? 0 : n <= 12 ? 1 : n <= 24 ? 2 : 3;
       const getColumn = (n: number) => n === 0 ? 0 : n % 3 === 1 ? 1 : n % 3 === 2 ? 2 : 3;
@@ -1651,7 +1819,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 23: RESSONÂNCIA DE FIBONACCI ---
+    // --- CAMADA 26: RESSONÂNCIA DE FIBONACCI ---
     if (history.length >= 3) {
       const FIBONACCI_DISTANCES = [1, 2, 3, 5, 8, 13];
       const getDistance = (n1: number, n2: number) => {
@@ -1686,7 +1854,7 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 24: DETECTOR DE ALTERNÂNCIA (CHOPPY VS STREAKY) ---
+    // --- CAMADA 27: DETECTOR DE ALTERNÂNCIA (CHOPPY VS STREAKY) ---
     if (history.length >= 4) {
       const getColor = (n: number) => n === 0 ? 'green' : ROULETTE_NUMBERS[n].color;
       const recentColors = history.slice(0, 4).map(getColor);
@@ -1727,21 +1895,11 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 26: ANÁLISE DE LONGO PRAZO (ESPELHAMENTO DE SEQUÊNCIA) ---
+    // --- CAMADA 28: ANÁLISE DE LONGO PRAZO (ESPELHAMENTO DE SEQUÊNCIA) ---
     if (history.length >= 40) {
       const seqLen = 2; // Procuramos por pares que se repetem
       const currentSeq = history.slice(0, seqLen);
       
-      // Função para pegar vizinhos no cilindro
-      const getNeighbors = (n: number) => {
-        const idx = WHEEL_ORDER.indexOf(n);
-        return [
-          WHEEL_ORDER[(idx - 1 + 37) % 37],
-          n,
-          WHEEL_ORDER[(idx + 1) % 37]
-        ];
-      };
-
       const currentSeqWithNeighbors = currentSeq.map(getNeighbors);
 
       // Otimização: Limitar a busca aos últimos 200 números para manter a fluidez
@@ -1784,7 +1942,49 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 25: WHEEL SLICE ANALYSIS (GRANULAR) ---
+    // --- CAMADA 29: INVERSE BROWNIAN MOTION (MEAN REVERSION) ---
+    if (history.length >= 20) {
+      const recentPositions = history.slice(0, 20).map(n => WHEEL_ORDER.indexOf(n));
+      const drift = recentPositions.reduce((acc, pos, idx, arr) => {
+        if (idx === 0) return acc;
+        let d = pos - arr[idx-1];
+        if (d > 18) d -= 37;
+        if (d < -18) d += 37;
+        return acc + d;
+      }, 0) / 19;
+
+      if (Math.abs(drift) > 4) { // Forte tendência unidirecional
+        const lastIdx = WHEEL_ORDER.indexOf(history[0]);
+        // Prevê que a bola vai "remover" o drift ou "cansar"
+        const counterTargetIdx = (lastIdx - Math.round(drift) + 37) % 37;
+        numberScores[WHEEL_ORDER[counterTargetIdx]] += 70 * engineWeights.bias;
+        
+        detectedBiases.push({
+          type: 'Crupiê',
+          value: `Drift de Cilindro Detectado (${drift.toFixed(1)})`,
+          confidence: 85
+        });
+      }
+    }
+
+    // --- CAMADA 30: HURST EXPONENT (MEMÓRIA DE LONGO PRAZO) ---
+    if (history.length >= 50) {
+      const redSpins = history.slice(0, 50).filter(n => ROULETTE_NUMBERS[n]?.color === 'red').length;
+      const hurstApprox = redSpins / 50;
+      if (hurstApprox > 0.65 || hurstApprox < 0.35) {
+        const targetColor = hurstApprox > 0.5 ? 'black' : 'red';
+        for (let i = 1; i <= 36; i++) {
+          if (ROULETTE_NUMBERS[i].color === targetColor) numberScores[i] += 45 * engineWeights.bias;
+        }
+        detectedBiases.push({
+          type: 'Longo Prazo',
+          value: `Memória de Cor detectada (Hurst: ${hurstApprox.toFixed(2)})`,
+          confidence: 90
+        });
+      }
+    }
+
+    // --- CAMADA 31: WHEEL SLICE ANALYSIS (GRANULAR) ---
     const slices = [
       [0, 32, 15, 19, 4, 21],
       [2, 25, 17, 34, 6, 27],
@@ -1807,10 +2007,9 @@ export default function App() {
       }
     });
 
-    // --- CAMADA 27: SECTOR TRANSITION MATRIX ---
+    // --- CAMADA 32: SECTOR TRANSITION MATRIX ---
     if (history.length >= 10) {
       const sectorTransitions: Record<string, Record<string, number>> = {};
-      // Otimização: Limitar profundidade da matriz de transição
       const matrixDepth = Math.min(history.length - 1, 150);
       for (let i = 0; i < matrixDepth; i++) {
         const currentS = getSector(history[i+1]);
@@ -1832,12 +2031,41 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 28: CROSS-SECTOR TERMINAL BREAK (ANÁLISE DE QUEBRA) ---
+    // --- CAMADA 33: BOLTZMANN DISTRIBUTION (HEAT MAPPING) ---
+    // Simula uma distribuição de energia baseada na frequência recente
+    const temperature = 0.5 + (chaosIndex * 2); // Mais caos = mais temperatura
+    const energyMap = numberScores.map(score => Math.exp(score / (temperature * 50)));
+    const partitionFunction = energyMap.reduce((a, b) => a + b, 0);
+    energyMap.forEach((prob, num) => {
+      const probability = (prob / partitionFunction) * 100;
+      if (probability > 10) { // Probabilidade significativa
+        numberScores[num] += probability * 2;
+      }
+    });
+
+    // --- CAMADA 34: QUANTUM ENTANGLEMENT (CROSS-TERMINAL SYNC) ---
+    // Detecta correlações "assustadoras" entre terminais que não deveriam estar ligados
+    const entanglementPairs = [[1, 9], [2, 7], [3, 5], [4, 8], [6, 0]];
+    entanglementPairs.forEach(pair => {
+      const f0 = last50.filter(n => n % 10 === pair[0]).length;
+      const f1 = last50.filter(n => n % 10 === pair[1]).length;
+      if (f0 > 0 && f1 > 0 && Math.abs(f0 - f1) < 2) { // Terminais "entrelaçados" em frequência
+        pair.forEach(t => {
+          advancedScores[t] += 30 * engineWeights.bias;
+          for (let i = 0; i <= 36; i++) {
+            if (i % 10 === t) numberScores[i] += 30 * engineWeights.bias;
+          }
+        });
+      }
+    });
+
+    // --- CAMADA 35: CROSS-SECTOR TERMINAL BREAK (ANÁLISE DE QUEBRA) ---
     if (history.length >= 5) {
-      const strongestTerminal = scores.indexOf(Math.max(...scores));
+      // Combina scores para encontrar o terminal mais forte globalmente
+      const combinedTerminalScores = new Array(10).fill(0).map((_, i) => scores[i] + advancedScores[i]);
+      const strongestTerminal = combinedTerminalScores.indexOf(Math.max(...combinedTerminalScores));
       
-      if (scores[strongestTerminal] > 100) {
-        // Otimização: Evitar Array.from em cada render
+      if (combinedTerminalScores[strongestTerminal] > 100) {
         const terminalNumbers = [strongestTerminal, strongestTerminal + 10, strongestTerminal + 20, strongestTerminal + 30].filter(n => n <= 36);
         
         const sectorCounts: Record<string, number> = {};
@@ -1868,6 +2096,44 @@ export default function App() {
       }
     }
 
+    // --- CAMADA 37: ADAPTIVE CHAOS FILTER (ANTI-RANDOM) ---
+    if (chaosIndex > 0.78) {
+      // Mesa entrou em "Modo Aleatório"
+      detectedBiases.push({
+        type: 'Filtro de Caos',
+        value: `Modo Caótico Ativado (Indice: ${chaosIndex.toFixed(2)})`,
+        confidence: 100
+      });
+
+      // Silencia parte dos scores de tendência (Redução de 60%)
+      for (let i = 0; i <= 36; i++) {
+        numberScores[i] *= 0.4;
+      }
+
+      // Foca em Vácuo Extremo (> 100 giros sem sair)
+      let extremeVacuumDetected = false;
+      for (let i = 0; i <= 36; i++) {
+        const gap = history.indexOf(i);
+        if (gap > 100 || gap === -1) {
+          numberScores[i] += 600 * engineWeights.bias;
+          extremeVacuumDetected = true;
+          detectedBiases.push({
+            type: 'Vácuo Extremo',
+            value: `Número ${i} (#Vácuo ${gap === -1 ? history.length : gap})`,
+            confidence: 95
+          });
+        }
+      }
+
+      if (!extremeVacuumDetected) {
+         // Fallback para terminais resfriados em modo caótico
+         for (let i = 0; i <= 36; i++) {
+           const tFreq = last50.filter(n => n % 10 === (i % 10)).length;
+           if (tFreq <= 3) numberScores[i] += 200 * engineWeights.bias;
+         }
+      }
+    }
+
     const sortedNumbers = numberScores
       .map((score, num) => ({ num, score }))
       .sort((a, b) => b.score - a.score);
@@ -1875,26 +2141,24 @@ export default function App() {
     const top8 = (sortedNumbers || []).slice(0, 8);
     
     // Normalize scores to percentages for UI
-    const maxPossibleScore = 1400; // Updated max for new Long Term layer
+    const maxPossibleScore = 1800; // Updated max for new layers
     const targetsWithConfidence = top8.map(t => ({
       num: t.num,
       confidence: Math.min(Math.round((t.score / maxPossibleScore) * 100 * (1.2 - chaosIndex)), 99)
     }));
 
-    // --- CAMADA 18: SNIPER CONVERGENCE (MAX PRECISION) ---
-    const mainTarget = top8[0]?.num ?? 0;
-    const mainScore = top8[0]?.score ?? 0;
+    // --- CAMADA 36: SNIPER CONVERGENCE (MAX PRECISION) ---
+    const mainTargetNum = top8[0]?.num ?? 0;
+    const mainScoreValue = top8[0]?.score ?? 0;
     
     // Sniper is true if main target has high score AND matches at least 2 other high-confidence biases
     const sniperBiases = detectedBiases.filter(b => {
-      const mainIdx = WHEEL_ORDER.indexOf(mainTarget);
+      const mainIdx = WHEEL_ORDER.indexOf(mainTargetNum);
       const lastIdx = history.length > 0 ? WHEEL_ORDER.indexOf(history[0]) : -1;
       
-      // Check if mainTarget is mentioned or related to the bias
-      const isMentioned = b.value.includes(`${mainTarget}`) || b.value.includes(`Terminal ${mainTarget % 10}`);
+      const isMentioned = b.value.includes(`${mainTargetNum}`) || b.value.includes(`Terminal ${mainTargetNum % 10}`);
       
       if (b.type === 'Assinatura') {
-        // For Assinatura, check if mainTarget is in the predicted zone
         if (b.value.includes('Salto')) {
           const jumpMatch = b.value.match(/Salto ~?(-?\d+)/);
           if (jumpMatch && lastIdx !== -1) {
@@ -1907,43 +2171,37 @@ export default function App() {
         return isMentioned;
       }
       
-      if (b.type === 'Balística Ativa') {
-        return isMentioned;
-      }
+      if (b.type === 'Balística Ativa') return isMentioned;
 
       return isMentioned || 
-             (MIRROR_NUMBERS_LIST.includes(mainTarget) && b.type === 'Espelho Direto') ||
-             (b.type === 'Padrão de Vácuo' && b.value.includes(`Número ${mainTarget}`)) ||
-             (b.type === 'Vácuo Recorrente' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-             (b.type === 'Desvio Padrão' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-             (b.type === 'Terminal Repetido' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-             (b.type === 'Terminal Triplo' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-             (b.type === 'Sequência Histórica' && b.value.includes(`T${mainTarget % 10}`)) ||
-             (b.type === 'Lei do Terceiro' && b.value.includes(`${mainTarget}`)) ||
-             (b.type === 'Quebra de Setor' && b.value.includes(`Terminal ${mainTarget % 10}`)) ||
-             (b.type === 'Longo Prazo' && b.value.includes(`${mainTarget}`));
+             (MIRROR_NUMBERS_LIST.includes(mainTargetNum) && b.type === 'Espelho Direto') ||
+             (b.type === 'Padrão de Vácuo' && b.value.includes(`Número ${mainTargetNum}`)) ||
+             (b.type === 'Vácuo Recorrente' && b.value.includes(`Terminal ${mainTargetNum % 10}`)) ||
+             (b.type === 'Desvio Padrão' && b.value.includes(`Terminal ${mainTargetNum % 10}`)) ||
+             (b.type === 'Terminal Repetido' && b.value.includes(`Terminal ${mainTargetNum % 10}`)) ||
+             (b.type === 'Terminal Triplo' && b.value.includes(`Terminal ${mainTargetNum % 10}`)) ||
+             (b.type === 'Sequência Histórica' && b.value.includes(`T${mainTargetNum % 10}`)) ||
+             (b.type === 'Lei do Terceiro' && b.value.includes(`${mainTargetNum}`)) ||
+             (b.type === 'Quebra de Setor' && b.value.includes(`Terminal ${mainTargetNum % 10}`)) ||
+             (b.type === 'Longo Prazo' && b.value.includes(`${mainTargetNum}`));
     });
     
-    const isSniper = (mainScore > 550 && sniperBiases.length >= 2) || (mainScore > 800);
-    const betPercentage = isSniper ? Math.min(Math.round((mainScore / 800) * 100), 99) : 0;
+    const isSniperActive = (mainScoreValue > 550 && sniperBiases.length >= 2) || (mainScoreValue > 800);
+    const betPercentageValue = isSniperActive ? Math.min(Math.round((mainScoreValue / 800) * 100), 99) : 0;
 
-    // Lógica de "Zona de Impacto": Se o top 5 está concentrado em uma área do cilindro
-    const mainIdx = WHEEL_ORDER.indexOf(mainTarget);
-    const neighbors = [
-      WHEEL_ORDER[(mainIdx - 2 + 37) % 37],
-      WHEEL_ORDER[(mainIdx - 1 + 37) % 37],
-      mainTarget,
-      WHEEL_ORDER[(mainIdx + 1) % 37],
-      WHEEL_ORDER[(mainIdx + 2) % 37]
+    const mainIdxVal = WHEEL_ORDER.indexOf(mainTargetNum);
+    const neighborsList = [
+      WHEEL_ORDER[(mainIdxVal - 2 + 37) % 37],
+      WHEEL_ORDER[(mainIdxVal - 1 + 37) % 37],
+      mainTargetNum,
+      WHEEL_ORDER[(mainIdxVal + 1) % 37],
+      WHEEL_ORDER[(mainIdxVal + 2) % 37]
     ];
 
-    // Verifica se os outros 4 do top 5 estão entre os vizinhos do principal
-    const isConcentrated = (top8 || []).slice(1, 5).every(t => neighbors.includes(t.num));
-    
-    const finalTargets = isConcentrated ? neighbors : top8.map(t => t.num);
+    const isConcentratedArea = (top8 || []).slice(1, 5).every(t => neighborsList.includes(t.num));
+    const finalTargetsList = isConcentratedArea ? neighborsList : top8.map(t => t.num);
 
-    // Trend Data for Chart (Last 20)
-    const trendData = (history || []).slice(0, 20).reverse().map((num, i) => ({
+    const trendDataList = (history || []).slice(0, 20).reverse().map((num, i) => ({
       index: i,
       value: num,
       color: ROULETTE_NUMBERS[num].color
@@ -1957,22 +2215,22 @@ export default function App() {
       terminalGaps: Array.from({ length: 10 }).map((_, t) => {
         const terminalNums = Array.from({length: 37}, (_, i) => i).filter(n => n % 10 === t);
         const pastGaps = calculateGaps(history, terminalNums);
-        const lastCompletedGap = pastGaps.length > 0 ? pastGaps[pastGaps.length - 1] : 0;
-        const currentOngoingGap = history.findIndex(n => terminalNums.includes(n));
-        return { lastCompletedGap, currentOngoingGap };
+        return { 
+          lastCompletedGap: pastGaps.length > 0 ? pastGaps[pastGaps.length - 1] : 0, 
+          currentOngoingGap: history.findIndex(n => terminalNums.includes(n)) 
+        };
       }),
       sectorCounts,
-      trendData,
+      trendData: trendDataList,
       terminalAnalysis: {
-        families: Object.entries(FAMILIAS_CFG).map(([key, nums]) => {
-          const lastSeen = history.findIndex(n => nums.includes(n % 10));
-          return { key, nums, lastSeen };
-        }),
-        mirrors: ESPELHOS_CFG.pairs.map(pair => {
-          const f0 = last50.filter(n => n % 10 === pair[0]).length;
-          const f1 = last50.filter(n => n % 10 === pair[1]).length;
-          return { pair, f0, f1 };
-        })
+        families: Object.entries(FAMILIAS_CFG).map(([key, nums]) => ({
+          key, nums, lastSeen: history.findIndex(n => nums.includes(n % 10))
+        })),
+        mirrors: ESPELHOS_CFG.pairs.map(pair => ({
+          pair, 
+          f0: last50.filter(n => n % 10 === pair[0]).length, 
+          f1: last50.filter(n => n % 10 === pair[1]).length 
+        }))
       },
       biases: detectedBiases,
       barChartData,
@@ -1999,12 +2257,10 @@ export default function App() {
         return { avgDist, variance, distances };
       })() : null,
       groupPredictions: (() => {
-        const g1 = scores[1] + scores[4] + scores[7] + scores[0];
-        const g2 = scores[2] + scores[5] + scores[8];
-        const g3 = scores[3] + scores[6] + scores[9];
-        const total = g1 + g2 + g3 || 1;
-        
-        const preds = [
+        const g1 = (scores[1] || 0) + (scores[4] || 0) + (scores[7] || 0) + (scores[0] || 0);
+        const g2 = (scores[2] || 0) + (scores[5] || 0) + (scores[8] || 0);
+        const g3 = (scores[3] || 0) + (scores[6] || 0) + (scores[9] || 0);
+        return [
           { name: '0.1.4.7', score: g1, terminals: [0, 1, 4, 7], color: '#BF953F' },
           { name: '2.5.8', score: g2, terminals: [2, 5, 8], color: '#B38728' },
           { name: '3.6.9', score: g3, terminals: [3, 6, 9], color: '#AA771C' }
@@ -2013,18 +2269,16 @@ export default function App() {
           confidence: Math.min(Math.round((p.score / 200) * 100), 99),
           lastSeen: history.findIndex(n => p.terminals.includes(n % 10))
         })).sort((a, b) => b.score - a.score);
-
-        return preds;
       })(),
       prediction: { 
         terminal: targetTerminal, 
         confidence,
-        targets: finalTargets,
+        targets: finalTargetsList,
         targetsWithConfidence,
-        isConcentrated,
-        mainTarget,
-        isSniper,
-        betPercentage
+        isConcentrated: isConcentratedArea,
+        mainTarget: mainTargetNum,
+        isSniper: isSniperActive,
+        betPercentage: betPercentageValue
       } 
     };
   }, [history, engineWeights]);
@@ -2109,66 +2363,102 @@ export default function App() {
     if (history.length < 3) return;
     
     // 1. Analyze confidence scores of all detected biases and prioritize alerts
-    // for those with confidence greater than 85%.
-    const highConfidenceBiases = stats?.biases?.filter(b => b.confidence > 85) || [];
+    // Filter for only important notification types
+    const importantTypes = [
+      'Lei do Terceiro', 'Longo Prazo', 'Espelhamento de Zona', 'Espelho Direto', 
+      'Padrão de Vácuo', 'Vácuo Recorrente', 'Assinatura', 'Balística Ativa', 
+      'Sequência Histórica', 'Curto Prazo', 'Magnetismo', 'Zero Magnet', 'Crupiê', 'Saturação'
+    ];
     
-    highConfidenceBiases.forEach(bias => {
-      const alertMsg = `${bias.value} (${bias.confidence}%)`;
-      // Check if this specific alert for this history length has already been shown
-      const alertId = `bias-${bias.type}-${bias.value}-${history.length}`;
+    // Log all incoming biases to the notification page (even less important ones)
+    (stats?.biases || []).forEach(bias => {
+      const isImportant = importantTypes.includes(bias.type) && bias.confidence >= 85;
+      const logId = `log-${bias.type}-${bias.value}-${history.length}`;
       
-      if (!dismissedAlerts.includes(alertId)) {
-        const isImportant = bias.type === 'Fibonacci' || bias.type === 'Longo Prazo' || bias.confidence > 90;
-        if (!isNotificationsMuted) {
-          toast.success(alertMsg, {
-            id: alertId,
-            duration: isImportant ? 15000 : 6000,
-            style: {
-              background: '#050505',
-              border: `1px solid ${isImportant ? '#22c55e' : 'rgba(34, 197, 94, 0.2)'}`,
-              color: '#fff',
-              fontFamily: 'inherit',
-              fontSize: '10px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              fontWeight: '900'
-            }
-          });
+      let alertMsg = `${bias.value} (${bias.confidence}%)`;
+      
+      // Compute the same enhanced message for the log too
+      if (bias.value.includes('Terminal') || bias.type === 'Curto Prazo' || bias.type === 'Padrão de Vácuo' || bias.type === 'Lei do Terceiro') {
+        const terminalMatch = bias.value.match(/Terminal (\d)/) || bias.value.match(/(\d)$/);
+        if (terminalMatch) {
+          const t = parseInt(terminalMatch[1]);
+          const terminalNums = Array.from({length: 37}, (_, i) => i).filter(n => n % 10 === t);
+          alertMsg = `${bias.value} | Jogar: ${terminalNums.join(', ')}`;
+        } else if (bias.type === 'Lei do Terceiro' || bias.type === 'Curto Prazo') {
+           alertMsg = `${bias.type}: ${bias.value}`;
         }
-        setDismissedAlerts(prev => [...prev, alertId]);
-        
-        // Play a notification sound if not muted
-        if (!isSoundMuted) {
-          try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-              const audioCtx = new AudioContextClass();
-              const oscillator = audioCtx.createOscillator();
-              const gainNode = audioCtx.createGain();
-              
-              // Higher pitch for higher confidence
-              const frequency = bias.confidence > 90 ? 1100 : 880;
-              
-              oscillator.type = 'sine';
-              oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
-              oscillator.frequency.exponentialRampToValueAtTime(frequency / 2, audioCtx.currentTime + 0.5);
-              
-              gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-              
-              oscillator.connect(gainNode);
-              gainNode.connect(audioCtx.destination);
-              
-              oscillator.start();
-              oscillator.stop(audioCtx.currentTime + 0.5);
-              setTimeout(() => {
-                if (audioCtx.state !== 'closed') {
-                  audioCtx.close().catch(() => {});
-                }
-              }, 600);
+      }
+
+      if (!notificationLog.find(l => l.id === logId)) {
+        setNotificationLog(prev => [{
+          id: logId,
+          bias,
+          formattedMessage: alertMsg,
+          spinIndex: history.length,
+          timestamp: Date.now(),
+          isImportant
+        }, ...prev].slice(0, 50)); // Keep last 50
+      }
+
+      if (isImportant) {
+        let displayMsg = `🎯 ${alertMsg}`;
+        if (bias.value.includes('Setor')) {
+          const sectorMatch = bias.value.match(/Setor (\w+)/);
+          if (sectorMatch) {
+            const s = sectorMatch[1].toLowerCase();
+            const sectorNums = SECTORS[s as keyof typeof SECTORS]?.slice(0, 6) || [];
+            if (sectorNums.length > 0) {
+              displayMsg = `🎯 ${bias.value}\nEx: ${sectorNums.join(', ')}...`;
             }
-          } catch (e) {
-            console.error("Audio error:", e);
+          }
+        } else if (bias.type === 'Longo Prazo' && bias.value.includes('chamou')) {
+          displayMsg = `📈 ${bias.value}`;
+        } else if (bias.type === 'Sequência Histórica') {
+          displayMsg = `📜 ${bias.value}\nFoco nos Terminais citados!`;
+        }
+
+        const alertId = `bias-${bias.type}-${bias.value}-${history.length}`;
+        
+        if (!dismissedAlerts.includes(alertId)) {
+          if (!isNotificationsMuted) {
+            toast.success(displayMsg, {
+              id: alertId,
+              duration: bias.type === 'Fibonacci' || bias.type === 'Longo Prazo' || bias.confidence > 90 ? 15000 : 6000,
+              style: {
+                background: '#050505',
+                border: `1px solid ${bias.confidence > 90 ? '#22c55e' : 'rgba(34, 197, 94, 0.2)'}`,
+                color: '#fff',
+                fontFamily: 'inherit',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontWeight: '900'
+              }
+            });
+          }
+          setDismissedAlerts(prev => [...prev, alertId]);
+          
+          // Play a notification sound
+          if (!isSoundMuted) {
+            try {
+              const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+              if (AudioContextClass) {
+                const audioCtx = new AudioContextClass();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                const frequency = bias.confidence > 90 ? 1100 : 880;
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(frequency / 2, audioCtx.currentTime + 0.5);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.5);
+                setTimeout(() => { if (audioCtx.state !== 'closed') audioCtx.close().catch(() => {}); }, 600);
+              }
+            } catch (e) { console.error("Audio error:", e); }
           }
         }
       }
@@ -2222,7 +2512,22 @@ export default function App() {
       }
 
       if (triggered) {
-        const alertMsg = ruleLabel;
+        let alertMsg = ruleLabel;
+        
+        // Add helper text for terminals and sectors in custom rules
+        if (rule.type === 'terminal') {
+          const t = Number(rule.value);
+          const terminalNums = Array.from({length: 37}, (_, i) => i).filter(n => n % 10 === t);
+          alertMsg = `⚠️ ALERTA: ${ruleLabel}\nSugerido: ${terminalNums.join(', ')}`;
+        } else if (rule.type === 'terminalGroup') {
+          const g = rule.value;
+          let nums: number[] = [];
+          if (g === '1') nums = [0, 1, 4, 7, 10, 11, 14, 17, 20, 21, 24, 27, 30, 31, 34];
+          if (g === '2') nums = [2, 5, 8, 12, 15, 18, 22, 25, 28, 32, 35];
+          if (g === '3') nums = [3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36];
+          alertMsg = `⚠️ ALERTA: ${ruleLabel}\nSugerido: ${nums.sort((a,b)=>a-b).slice(0, 8).join(', ')}...`;
+        }
+
         const alertId = `rule-${rule.id}-${history.length}`;
         
         if (!dismissedAlerts.includes(alertId)) {
@@ -2344,33 +2649,6 @@ export default function App() {
           }}
           transition={{ duration: 0.8, ease: "easeInOut" }}
         />
-        <AnimatePresence>
-          {(stats?.prediction?.confidence || 0) > 85 && (
-            <motion.div 
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              className="fixed left-0.5 top-[42%] -translate-y-1/2 z-[100] py-1.5 px-0.5 neon-green-gradient rounded-full text-black shadow-[0_0_40px_rgba(34,197,94,0.5)] flex flex-col items-center gap-1 border border-white/20 w-7 max-h-[90vh]"
-            >
-              <div className="flex flex-col items-center">
-                <Zap className="w-3 h-3 animate-bounce fill-black shrink-0" />
-              </div>
-              
-              <div className="flex flex-col items-center gap-0.5 overflow-y-auto scrollbar-hide w-full px-0">
-                {allCylinderTargets.map((num) => (
-                  <motion.span 
-                    key={num} 
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="bg-black/10 w-6 h-6 min-h-[24px] flex items-center justify-center rounded text-[9px] font-black border border-black/5"
-                  >
-                    {num}
-                  </motion.span>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Floating Mute Controls */}
@@ -2417,10 +2695,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 gold-gradient rounded-2xl flex items-center justify-center shadow-2xl shadow-gold-primary/30 border border-white/20">
-              <ShieldCheck className="w-7 h-7 text-black" />
+              <RouletteIcon className="w-8 h-8" />
             </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tighter uppercase italic gold-text">Costa <span className="text-white">analises</span></h1>
+            <div className="pr-4">
+              <h1 className="text-2xl font-black tracking-tight uppercase italic gold-text leading-none">Exu <span className="text-white">do Ouro</span></h1>
               <p className="text-[10px] uppercase tracking-[0.4em] text-zinc-600 font-black">Terminal de Elite</p>
             </div>
           </div>
@@ -2466,27 +2744,7 @@ export default function App() {
           {[
             { id: 'DASHBOARD', label: 'Dashboard', icon: Activity },
             { id: 'TERMINAIS', label: 'Terminais', icon: Zap },
-            { id: 'RADAR', label: 'Radar de Viés', icon: Radar, badge: (stats?.biases?.length || 0) + customRules.filter(r => {
-              if (!r.enabled || (history || []).length < r.threshold) return false;
-              const lastN = (history || []).slice(0, r.threshold).map(n => ROULETTE_NUMBERS[n]);
-              switch (r.type) {
-                case 'color': return lastN.every(n => n && n.color === r.value);
-                case 'parity': return lastN.every(n => n && (r.value === 'even' ? n.isEven : (!n.isEven && n.num !== 0)));
-                case 'highlow': return lastN.every(n => n && (r.value === 'high' ? n.isHigh : (!n.isHigh && n.num !== 0)));
-                case 'dozen': return lastN.every(n => n && n.dozen === Number(r.value));
-                case 'column': return lastN.every(n => n && n.column === Number(r.value));
-                case 'terminalGroup': return lastN.every(n => {
-                  if (!n) return false;
-                  const terminal = n.num % 10;
-                  if (r.value === '1') return [0, 1, 4, 7].includes(terminal);
-                  if (r.value === '2') return [2, 5, 8].includes(terminal);
-                  if (r.value === '3') return [3, 6, 9].includes(terminal);
-                  return false;
-                });
-                case 'terminal': return lastN.every(n => n && (n.num % 10) === Number(r.value));
-                default: return false;
-              }
-            }).length },
+            { id: 'RADAR', label: 'Notificações', icon: Radar, badge: notificationLog.length > 0 ? notificationLog.length : undefined },
             { id: 'ANALISE', label: 'Análise Técnica', icon: Zap },
             { id: 'SETORIAIS', label: 'Setoriais', icon: Target },
             { id: 'ESTATISTICAS', label: 'Estatísticas', icon: BarChart3 },
@@ -2587,7 +2845,7 @@ export default function App() {
               transition={{ duration: 0.3 }}
             >
               <Suspense fallback={<TabLoading />}>
-                <RadarTab stats={stats} customRules={customRules} history={history} setActiveTab={setActiveTab} />
+                <RadarTab stats={stats} customRules={customRules} history={history} setActiveTab={setActiveTab} notificationLog={notificationLog} />
               </Suspense>
             </motion.div>
           )}
@@ -2684,7 +2942,7 @@ export default function App() {
           <div className="flex flex-col items-center gap-4">
             <div className="flex items-center gap-2 opacity-30">
               <ShieldCheck className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Costa Security Protocol</span>
+              <span className="text-[10px] uppercase tracking-[0.5em] font-black">Golden Security Protocol</span>
             </div>
             <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] font-bold">
               Algoritmo de Alta Frequência • Licença de Uso Profissional

@@ -8,7 +8,9 @@ export class NeuralEngine {
   private readyPromise: Promise<void>;
 
   constructor() {
-    this.readyPromise = this.init();
+    this.readyPromise = this.init().catch(err => {
+      console.error("NeuralEngine init failed:", err);
+    });
   }
 
   private async init() {

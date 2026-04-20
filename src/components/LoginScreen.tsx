@@ -1,10 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Lock, ShieldCheck, Zap, ChevronRight, AlertCircle } from 'lucide-react';
+import { Lock, Zap, ChevronRight, AlertCircle } from 'lucide-react';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
 
 interface LoginScreenProps {
   onLogin: () => void;
 }
+
+const RouletteIcon = ({ className = "w-8 h-8" }: { className?: string }) => (
+  <svg viewBox="0 0 100 100" className={className}>
+    <circle cx="50" cy="50" r="48" fill="#0c0a09" stroke="#D4AF37" strokeWidth="2" />
+    {[...Array(37)].map((_, i) => {
+      const angle = (i * 360) / 37;
+      const nextAngle = ((i + 1) * 360) / 37;
+      const x1 = 50 + 42 * Math.cos((angle * Math.PI) / 180);
+      const y1 = 50 + 42 * Math.sin((angle * Math.PI) / 180);
+      const x2 = 50 + 42 * Math.cos((nextAngle * Math.PI) / 180);
+      const y2 = 50 + 42 * Math.sin((nextAngle * Math.PI) / 180);
+      
+      let color = "#000000";
+      if (i === 0) color = "#16a34a"; // Green 0
+      else if ([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36].includes(i)) color = "#ef4444"; // Red
+      
+      return (
+        <path
+          key={i}
+          d={`M 50 50 L ${x1} ${y1} A 42 42 0 0 1 ${x2} ${y2} Z`}
+          fill={color}
+          stroke="#D4AF37"
+          strokeWidth="0.2"
+        />
+      );
+    })}
+    <circle cx="50" cy="50" r="12" fill="#D4AF37" />
+    <circle cx="50" cy="50" r="4" fill="#fff" />
+  </svg>
+);
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -70,13 +102,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           <motion.div 
             initial={{ scale: 0.8 }}
             animate={{ scale: 1 }}
-            className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center shadow-[0_0_50px_rgba(212,175,55,0.3)] border border-white/20 mb-6 opacity-60"
+            className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center shadow-[0_0_50px_rgba(212,175,55,0.3)] border border-white/20 mb-6"
           >
-            <ShieldCheck className="w-10 h-10 text-black" />
+            <RouletteIcon className="w-12 h-12" />
           </motion.div>
-          <h1 className="text-4xl font-black tracking-tighter uppercase italic gold-text text-center opacity-40">
-            Costa <span className="text-white">analises</span>
-          </h1>
+          <div className="px-4">
+            <h1 className="text-4xl font-black tracking-tight uppercase italic gold-text text-center leading-none">
+              Exu <span className="text-white">do Ouro</span>
+            </h1>
+          </div>
           <p className="text-[10px] uppercase tracking-[0.6em] text-zinc-500 font-black mt-2 opacity-30">Protocolo de Elite</p>
         </div>
 
