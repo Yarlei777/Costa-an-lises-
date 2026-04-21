@@ -368,6 +368,8 @@ export default function App() {
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
   const [lastNumber, setLastNumber] = useState<number | null>(null);
 
+  const [nextBallDirection, setNextBallDirection] = useState<'DIR' | 'ESQ'>('DIR');
+
   const handleGoogleSearch = React.useCallback((query: string) => {
     if (!query) {
       setBrowserUrl(null);
@@ -469,6 +471,7 @@ export default function App() {
     if (!validate(num)) return;
     
     totalNumbersAdded.current += 1;
+    setNextBallDirection(prev => prev === 'DIR' ? 'ESQ' : 'DIR');
 
     // Simulate haptic feedback
     if (window.navigator.vibrate) {
@@ -1942,28 +1945,76 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 29: INVERSE BROWNIAN MOTION (MEAN REVERSION) ---
+    // --- CAMADA 29: INVERSE BROWNIAN MOTION (RITMO CONSTANTE / DRIFT) ---
     if (history.length >= 20) {
       const recentPositions = history.slice(0, 20).map(n => WHEEL_ORDER.indexOf(n));
-      const drift = recentPositions.reduce((acc, pos, idx, arr) => {
-        if (idx === 0) return acc;
-        let d = pos - arr[idx-1];
-        if (d > 18) d -= 37;
-        if (d < -18) d += 37;
-        return acc + d;
-      }, 0) / 19;
+      
+      // Cálculo de Salto Constante considerando a Alternância de Lado (DIR/ESQ)
+      let shortTermJumpDetected = false;
+      let predictedNum = -1;
 
-      if (Math.abs(drift) > 4) { // Forte tendência unidirecional
-        const lastIdx = WHEEL_ORDER.indexOf(history[0]);
-        // Prevê que a bola vai "remover" o drift ou "cansar"
-        const counterTargetIdx = (lastIdx - Math.round(drift) + 37) % 37;
-        numberScores[WHEEL_ORDER[counterTargetIdx]] += 70 * engineWeights.bias;
+      if (history.length >= 3) {
+        const p0 = WHEEL_ORDER.indexOf(history[0]); // Mais recente
+        const p1 = WHEEL_ORDER.indexOf(history[1]);
+        const p2 = WHEEL_ORDER.indexOf(history[2]); // Mais antiga
+
+        // Determina as direções usadas nos últimos 2 giros (opostas à próxima)
+        const dir0 = nextBallDirection === 'DIR' ? 'ESQ' : 'DIR'; // Direção que gerou history[0]
+        const dir1 = nextBallDirection; // Direção que gerou history[1]
+
+        // Distância Real Percorrida no Giro 0 (h1 -> h0)
+        let dist0 = dir0 === 'DIR' ? (p0 - p1 + 37) % 37 : (p1 - p0 + 37) % 37;
+        
+        // Distância Real Percorrida no Giro 1 (h2 -> h1)
+        let dist1 = dir1 === 'DIR' ? (p1 - p2 + 37) % 37 : (p2 - p1 + 37) % 37;
+
+        // Se a distância real percorrida for constante (mesma força de braço)
+        if (Math.abs(dist0 - dist1) <= 1 && dist0 > 1) {
+          shortTermJumpDetected = true;
+          const avgDist = (dist0 + dist1) / 2;
+          
+          // Prediz com base na PRÓXIMA direção
+          const predictedIdx = nextBallDirection === 'DIR' 
+            ? (p0 + Math.round(avgDist) + 37) % 37 
+            : (p0 - Math.round(avgDist) + 37) % 37;
+          
+          predictedNum = WHEEL_ORDER[predictedIdx];
+        }
+      }
+
+      if (shortTermJumpDetected) {
+        const targets = getNeighbors(predictedNum);
+        targets.forEach(n => numberScores[n] += 135 * engineWeights.bias);
         
         detectedBiases.push({
           type: 'Crupiê',
-          value: `Drift de Cilindro Detectado (${drift.toFixed(1)})`,
-          confidence: 85
+          value: `Lançamento ${nextBallDirection}: Salto Constante p/ ${predictedNum} (+vizinhos)`,
+          confidence: 92
         });
+      } else {
+        // Fallback para drift médio (independente de lado)
+        const drift = recentPositions.reduce((acc, pos, idx, arr) => {
+          if (idx === 0) return acc;
+          let d = pos - arr[idx-1];
+          if (d > 18) d -= 37;
+          if (d < -18) d += 37;
+          return acc + d;
+        }, 0) / 19;
+
+        if (Math.abs(drift) > 4) { 
+          const lastIdx = WHEEL_ORDER.indexOf(history[0]);
+          const counterTargetIdx = (lastIdx - Math.round(drift) + 37) % 37;
+          const targetNum = WHEEL_ORDER[counterTargetIdx];
+          const neighbors = getNeighbors(targetNum);
+          
+          neighbors.forEach(n => numberScores[n] += 70 * engineWeights.bias);
+          
+          detectedBiases.push({
+            type: 'Crupiê',
+            value: `Ritmo: Alvo ${targetNum} e vizinhos`,
+            confidence: 85
+          });
+        }
       }
     }
 
@@ -2815,6 +2866,8 @@ export default function App() {
                   setBallisticMode(!ballisticMode);
                   setCurrentDropPoint(null);
                 }}
+                nextBallDirection={nextBallDirection}
+                onToggleDirection={() => setNextBallDirection(prev => prev === 'DIR' ? 'ESQ' : 'DIR')}
               />
             </motion.div>
           </Suspense>

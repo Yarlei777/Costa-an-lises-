@@ -27,6 +27,8 @@ interface DashboardTabProps {
   ballisticMode?: boolean;
   currentDropPoint?: number | null;
   onToggleBallisticMode?: () => void;
+  nextBallDirection?: 'DIR' | 'ESQ';
+  onToggleDirection?: () => void;
 }
 
 const INPUT_NUMBERS = Array.from({ length: 37 }, (_, i) => i);
@@ -51,7 +53,9 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   onClearBrowser,
   ballisticMode,
   currentDropPoint,
-  onToggleBallisticMode
+  onToggleBallisticMode,
+  nextBallDirection,
+  onToggleDirection
 }) => {
   const [searchValue, setSearchValue] = React.useState('');
   const [isIframeLoading, setIsIframeLoading] = React.useState(false);
@@ -410,9 +414,17 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               <Zap className="w-4 h-4 text-gold-primary" />
               <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">Entrada de Dados Rápida</h2>
             </div>
-            <button onClick={onToggleBallisticMode} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${ballisticMode ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-white/5 border-white/10 text-zinc-500'}`}>
-              {ballisticMode ? 'Balística ON' : 'Balística OFF'}
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={onToggleDirection} 
+                className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all shadow-lg ${nextBallDirection === 'DIR' ? 'bg-gold-primary/20 border-gold-primary/40 text-gold-primary' : 'bg-blue-500/20 border-blue-500/40 text-blue-400'}`}
+              >
+                {nextBallDirection === 'DIR' ? 'Lançamento: Direita (CW)' : 'Lançamento: Esquerda (CCW)'}
+              </button>
+              <button onClick={onToggleBallisticMode} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${ballisticMode ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-white/5 border-white/10 text-zinc-500'}`}>
+                {ballisticMode ? 'Balística ON' : 'Balística OFF'}
+              </button>
+            </div>
           </div>
 
           {/* Recent Numbers Preview */}
