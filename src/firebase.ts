@@ -61,8 +61,27 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 // Auth functions
-export const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
-export const logout = () => signOut(auth);
+export const loginWithGoogle = async () => {
+  try {
+    return await signInWithPopup(auth, googleProvider);
+  } catch (error: any) {
+    // Only log if it's not a user-cancelled action to reduce noise
+    if (error?.code !== 'auth/popup-closed-by-user') {
+      console.error("Firebase Login Error:", error);
+    }
+    // Re-throw so the UI can catch it, but now it's a controlled throw
+    throw error;
+  }
+};
+
+export const logout = async () => {
+  try {
+    return await signOut(auth);
+  } catch (error) {
+    console.error("Firebase Logout Error:", error);
+    throw error;
+  }
+};
 
 // Types
 export interface UserSession {

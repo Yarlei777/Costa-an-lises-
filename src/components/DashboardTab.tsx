@@ -24,11 +24,10 @@ interface DashboardTabProps {
   onGoogleSearch?: (query: string) => void;
   browserUrl?: string | null;
   onClearBrowser?: () => void;
-  ballisticMode?: boolean;
-  currentDropPoint?: number | null;
-  onToggleBallisticMode?: () => void;
   nextBallDirection?: 'DIR' | 'ESQ';
   onToggleDirection?: () => void;
+  ballisticConvergence?: { target: number; confidence: number } | null;
+  ballisticJumps?: number[];
 }
 
 const INPUT_NUMBERS = Array.from({ length: 37 }, (_, i) => i);
@@ -51,11 +50,10 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   onGoogleSearch,
   browserUrl,
   onClearBrowser,
-  ballisticMode,
-  currentDropPoint,
-  onToggleBallisticMode,
   nextBallDirection,
-  onToggleDirection
+  onToggleDirection,
+  ballisticConvergence,
+  ballisticJumps
 }) => {
   const [searchValue, setSearchValue] = React.useState('');
   const [isIframeLoading, setIsIframeLoading] = React.useState(false);
@@ -155,8 +153,26 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
       }
     });
     
+    // Add ballistic target if it exists
+    if (ballisticConvergence) {
+      if (!targetsMap.has(ballisticConvergence.target)) {
+        targetsMap.set(ballisticConvergence.target, {
+          num: ballisticConvergence.target,
+          confidence: ballisticConvergence.confidence,
+          isMirrorOnly: false
+        });
+      } else {
+        // Boost existing target confidence if ballistic target matches
+        const existing = targetsMap.get(ballisticConvergence.target)!;
+        targetsMap.set(ballisticConvergence.target, {
+          ...existing,
+          confidence: Math.min(existing.confidence + 15, 99)
+        });
+      }
+    }
+    
     return Array.from(targetsMap.values()).sort((a, b) => b.confidence - a.confidence);
-  }, [highlightedNumbers, stats?.prediction?.targetsWithConfidence, vacuumNumbers, contextTargets]);
+  }, [highlightedNumbers, stats?.prediction?.targetsWithConfidence, vacuumNumbers, contextTargets, ballisticConvergence]);
 
   // Performance optimization for animations
   const containerStyle = React.useMemo(() => ({
@@ -289,6 +305,41 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
 
       {/* Center Column: Search & Browser (Main Focus) */}
       <div className="lg:col-span-6 space-y-6 order-1 lg:order-2">
+        {/* Alerta de Balística Automática (Nova Camada) */}
+        <AnimatePresence>
+          {ballisticConvergence && (
+            <motion.section 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-[2rem] flex items-center justify-between shadow-[0_0_30px_rgba(16,185,129,0.1)] mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/40">
+                    <Target className="w-6 h-6 text-black" />
+                  </div>
+                  <div>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 leading-none mb-1">Ritmo Estável Detectado</h3>
+                    <p className="text-[14px] font-black text-white uppercase tracking-tight">Crupiê em modo cíclico</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <span className="text-[8px] font-black uppercase text-zinc-500 block">Alvo Física</span>
+                    <span className="text-2xl font-black text-emerald-500">{ballisticConvergence.target}</span>
+                  </div>
+                  <div className="w-[1px] h-10 bg-emerald-500/20" />
+                  <div className="text-right">
+                    <span className="text-[8px] font-black uppercase text-zinc-500 block">Assertividade</span>
+                    <span className="text-2xl font-black text-emerald-500">{ballisticConvergence.confidence}%</span>
+                  </div>
+                </div>
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
+
         {/* Probabilidade Central (Top of Center) */}
         <section className="relative flex flex-col items-center">
           <div className="w-full bg-black/40 backdrop-blur-xl border border-white/5 rounded-[2rem] p-6 relative overflow-hidden group">
@@ -421,9 +472,10 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               >
                 {nextBallDirection === 'DIR' ? 'Lançamento: Direita (CW)' : 'Lançamento: Esquerda (CCW)'}
               </button>
-              <button onClick={onToggleBallisticMode} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${ballisticMode ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-white/5 border-white/10 text-zinc-500'}`}>
-                {ballisticMode ? 'Balística ON' : 'Balística OFF'}
-              </button>
+              <div className="px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Balística AUTO
+              </div>
             </div>
           </div>
 

@@ -10,6 +10,8 @@ export class NeuralEngine {
   constructor() {
     this.readyPromise = this.init().catch(err => {
       console.error("NeuralEngine init failed:", err);
+      // Suppress further propagation of the init error to prevent unhandled rejections
+      return;
     });
   }
 

@@ -29,7 +29,7 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gold-primary/10 flex items-center justify-center">
-                  <Radar className="w-5 h-5 text-gold-primary animate-pulse" />
+                  <Radar className="w-5 h-5 text-gold-primary" />
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-white uppercase tracking-tighter italic">Central de <span className="gold-text">Notificações</span></h2>
@@ -38,7 +38,7 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
               </div>
               <div className="flex items-center gap-4">
                 <div className="px-3 py-1.5 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Feed em Tempo Real</span>
                 </div>
               </div>
@@ -55,33 +55,34 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                       key={log.id}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className={`p-4 rounded-2xl border transition-all flex items-center gap-6 ${
+                      whileHover={{ scale: 1.02, x: 8 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                      className={`p-5 rounded-[1.5rem] border transition-all flex items-center gap-6 group shadow-2xl ${
                         isImportant 
-                          ? 'bg-gold-primary/5 border-gold-primary/20 shadow-lg shadow-gold-primary/5' 
-                          : 'bg-white/5 border-white/5 opacity-70 hover:opacity-100'
+                          ? 'bg-white/95 border-gold-primary shadow-gold-primary/20' 
+                          : 'bg-white/80 border-white shadow-black/20'
                       }`}
                     >
-                      <div className="flex flex-col items-center justify-center min-w-[60px] border-r border-white/10 pr-4">
-                        <span className="text-[10px] font-black text-zinc-500">GIRO</span>
-                        <span className="text-xl font-black text-white">#{log.spinIndex}</span>
+                      <div className="flex flex-col items-center justify-center min-w-[70px] border-r border-black/10 pr-4">
+                        <span className="text-[10px] font-black text-black/40">GIRO</span>
+                        <span className="text-xl font-black text-black">#{log.spinIndex}</span>
                       </div>
 
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded ${
-                            isImportant ? 'bg-gold-primary text-black' : 'bg-white/5 text-zinc-500'
+                            isImportant ? 'bg-gold-primary text-black' : 'bg-black/10 text-zinc-600'
                           }`}>
                             {bias.type}
                           </span>
-                          {isImportant && <Zap className="w-3 h-3 text-gold-primary animate-pulse" />}
+                          {isImportant && <Zap className="w-3 h-3 text-gold-primary" />}
                         </div>
-                        <h3 className="text-base font-black text-white tracking-tight leading-tight">{log.formattedMessage || bias.value}</h3>
+                        <h3 className="text-base font-black text-black tracking-tight leading-tight">{log.formattedMessage || bias.value}</h3>
                         <div className="flex items-center gap-3 mt-2">
-                          <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
-                            <div className={`h-full ${isImportant ? 'bg-gold-primary' : 'bg-zinc-500'}`} style={{ width: `${bias.confidence}%` }} />
+                          <div className="w-24 h-1 bg-black/5 rounded-full overflow-hidden">
+                            <div className={`h-full ${isImportant ? 'bg-gold-primary' : 'bg-zinc-800'}`} style={{ width: `${bias.confidence}%` }} />
                           </div>
-                          <span className={`text-[9px] font-black ${isImportant ? 'gold-text' : 'text-zinc-500'}`}>{bias.confidence}% Confiança</span>
+                          <span className={`text-[9px] font-black ${isImportant ? 'text-gold-accent' : 'text-zinc-600'}`}>{bias.confidence}% Confiança</span>
                         </div>
                       </div>
 
@@ -91,7 +92,7 @@ const RadarTab: React.FC<RadarTabProps> = React.memo(({ stats, history, customRu
                           className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all shadow-sm ${
                             isImportant 
                               ? 'bg-gold-primary/10 border-gold-primary/20 text-gold-primary hover:bg-gold-primary hover:text-black' 
-                              : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white'
+                              : 'bg-black/5 border-black/10 text-zinc-500 hover:bg-black/10 hover:text-black'
                           }`}
                         >
                           Analisar

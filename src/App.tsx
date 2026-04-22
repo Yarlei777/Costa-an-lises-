@@ -281,8 +281,8 @@ export default function App() {
     sector: 1.0,
     shortTerm: 1.0
   });
-  const [ballisticMode, setBallisticMode] = useState(false);
-  const [currentDropPoint, setCurrentDropPoint] = useState<number | null>(null);
+  const [ballisticJumps, setBallisticJumps] = useState<number[]>([]);
+  const [ballisticConvergence, setBallisticConvergence] = useState<{ target: number; confidence: number } | null>(null);
 
   // --- AUTOMATIC WEIGHT BALANCING (BRAIN ADAPTATION) ---
   useEffect(() => {
@@ -394,6 +394,7 @@ export default function App() {
     setIsSearchingGoogle(false);
   }, []);
 
+
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -478,32 +479,102 @@ export default function App() {
       window.navigator.vibrate(20);
     }
     
-    if (ballisticMode) {
-      if (currentDropPoint === null) {
-        setCurrentDropPoint(num);
-        toast.success(`Ponto de soltura: ${num}. Agora selecione onde caiu.`);
-        return;
-      } else {
-        const drop = currentDropPoint;
-        const landed = num;
-        
-        // Calculate distance
-        const dropIdx = WHEEL_ORDER.indexOf(drop);
-        const landedIdx = WHEEL_ORDER.indexOf(landed);
-        let distance = (landedIdx - dropIdx + 37) % 37;
-        
-        toast.success(`Bola viajou ${distance} casas. (Soltura: ${drop} -> Caiu: ${landed})`);
-        
-        setCurrentDropPoint(null);
-        setLastNumber(num);
-        setHistory(prev => [num, ...prev].slice(0, 200));
-        return;
-      }
-    }
-
     setLastNumber(num);
     setHistory(prev => [num, ...prev].slice(0, 200));
-  }, [ballisticMode, currentDropPoint]);
+
+    // --- AUTOMATIC BALLISTIC LOGIC (CAMADA EXU) ---
+    // Dealer pulls last number to front. Offset ~6 pockets.
+    if (history.length > 0) {
+      const lastNum = history[0];
+      const lastIdx = WHEEL_ORDER.indexOf(lastNum);
+      const landedIdx = WHEEL_ORDER.indexOf(num);
+      
+      // Release point is offset from the last number (anchor)
+      // Since dealer moves cylinder opposite to ball, offset is relative
+      const offset = 6;
+      const theoreticalReleaseIdx = nextBallDirection === 'DIR' 
+        ? (lastIdx + offset) % 37 
+        : (lastIdx - offset + 37) % 37;
+      
+      let jump = 0;
+      if (nextBallDirection === 'DIR') {
+        jump = (landedIdx - theoreticalReleaseIdx + 37) % 37;
+      } else {
+        jump = (theoreticalReleaseIdx - landedIdx + 37) % 37;
+      }
+      
+      const newJumps = [jump, ...ballisticJumps].slice(0, 5);
+      setBallisticJumps(newJumps);
+
+      // Check for convergence (Spin 1 == Spin 2)
+      if (newJumps.length >= 2) {
+        const diff = Math.abs(newJumps[0] - newJumps[1]);
+        if (diff <= 1) {
+          const avgJump = Math.round((newJumps[0] + newJumps[1]) / 2);
+          const nextAnchorIdx = landedIdx; // Current number becomes next anchor
+          // Next ball direction will be opposite to current
+          const nextDir = nextBallDirection === 'DIR' ? 'ESQ' : 'DIR';
+          const nextReleaseIdx = nextDir === 'DIR' 
+            ? (nextAnchorIdx + offset) % 37 
+            : (nextAnchorIdx - offset + 37) % 37;
+          
+          const nextLandedIdx = nextDir === 'DIR'
+            ? (nextReleaseIdx + avgJump) % 37
+            : (nextReleaseIdx - avgJump + 37) % 37;
+          
+          const predictedNum = WHEEL_ORDER[nextLandedIdx];
+          const confidence = diff === 0 ? 98 : 85;
+          
+          setBallisticConvergence({
+            target: predictedNum,
+            confidence: confidence
+          });
+          
+          // Registrar Notificação no Radar
+          const targetIdx = WHEEL_ORDER.indexOf(predictedNum);
+          const neighbors = [
+            WHEEL_ORDER[(targetIdx - 2 + 37) % 37],
+            WHEEL_ORDER[(targetIdx - 1 + 37) % 37],
+            predictedNum,
+            WHEEL_ORDER[(targetIdx + 1) % 37],
+            WHEEL_ORDER[(targetIdx + 2) % 37]
+          ];
+
+          setNotificationLog(prev => [{
+            id: Date.now().toString(),
+            bias: {
+              type: 'SNIPER_BALLISTIC',
+              value: `🎯 ALVO: ${predictedNum} (+ vizinhos)`,
+              confidence: confidence
+            },
+            spinIndex: history.length,
+            timestamp: Date.now(),
+            isImportant: true,
+            formattedMessage: `Ritmo do crupiê estável (${avgJump} casas). Jogue no ${predictedNum} e vizinhos: ${neighbors.filter(n => n !== predictedNum).join(', ')}`
+          }, ...prev].slice(0, 50));
+          
+          if (diff === 0) {
+            // Ballistic alerts are prioritized with specific styling and long duration
+            toast.error(`ATAQUE BALÍSTICO`, {
+              icon: '🎯',
+              duration: 15000, 
+              description: `Alvo Detectado: ${predictedNum} (+ vizinhos). Convergência de ritmo identificada.`,
+              style: {
+                background: 'rgba(255, 255, 255, 0.85)',
+                backdropFilter: 'blur(32px)',
+                border: '2px solid #ef4444',
+                boxShadow: '0 0 40px rgba(239, 68, 68, 0.5)',
+                zIndex: 99999,
+                color: '#000'
+              }
+            });
+          }
+        } else {
+          setBallisticConvergence(null);
+        }
+      }
+    }
+  }, [history, nextBallDirection, ballisticJumps]);
 
   const clearHistory = React.useCallback(() => {
     setHistory([]);
@@ -537,8 +608,9 @@ export default function App() {
   };
 
   // Advanced Statistics & Prediction Engine (Ensemble Module)
-  const stats = useMemo(() => {
-    if (history.length === 0) return null;
+  const stats: Stats | null = useMemo(() => {
+    try {
+      if (history.length === 0) return null;
 
     const historyTotal = history.length;
     const counts = {
@@ -1416,48 +1488,27 @@ export default function App() {
       }
     }
 
-    // --- CAMADA 16: BALLISTIC MODE (PONTO DE SOLTURA) ---
-    // If ballistic mode is active and we have a drop point waiting, we predict based on historical distances.
-    // Since we don't have a complex history object with drop points yet, we'll use the basic dealer signature
-    // average distance calculated above, but applied to the *currentDropPoint* instead of the last landed number.
-    if (ballisticMode && currentDropPoint !== null) {
-      // Calculate average distance from recent history (assuming last number was the drop point for the current number)
-      // This is a simplified ballistic model. A full model would require storing drop points in history.
-      const distances: number[] = [];
-      for (let i = 0; i < Math.min(10, history.length - 1); i++) {
-        const currentIdx = WHEEL_ORDER.indexOf(history[i]);
-        const prevIdx = WHEEL_ORDER.indexOf(history[i+1]);
-        let dist = currentIdx - prevIdx;
-        if (dist < 0) dist += 37;
-        distances.push(dist);
-      }
+    // --- CAMADA 16: AUTOMATIC BALLISTIC CONVERGENCE ---
+    if (ballisticConvergence) {
+      const predictedNum = ballisticConvergence.target;
+      const confidence = ballisticConvergence.confidence;
       
-      if (distances.length > 0) {
-        // Find most frequent distance (mode) or use average if variance is low
-        const distFreq: Record<number, number> = {};
-        distances.forEach(d => distFreq[d] = (distFreq[d] || 0) + 1);
-        const mostFrequentDist = parseInt(Object.keys(distFreq).reduce((a, b) => distFreq[parseInt(a)] > distFreq[parseInt(b)] ? a : b));
-        
-        const dropIdx = WHEEL_ORDER.indexOf(currentDropPoint);
-        const predictedIdx = (dropIdx + mostFrequentDist) % 37;
-        const predictedNum = WHEEL_ORDER[predictedIdx];
-        
-        // Massive boost for ballistic prediction
-        numberScores[predictedNum] += 500; 
-        
-        // Boost neighbors
-        for (let offset = -2; offset <= 2; offset++) {
-          if (offset === 0) continue;
-          const idx = (predictedIdx + offset + 37) % 37;
-          numberScores[WHEEL_ORDER[idx]] += 200;
-        }
-
-        detectedBiases.push({
-          type: 'Balística Ativa',
-          value: `Alvo: ${predictedNum} (Salto: +${mostFrequentDist})`,
-          confidence: 99
-        });
+      // Massive boost for ballistic prediction in the heatmap
+      numberScores[predictedNum] += 600 * (confidence / 100); 
+      
+      // Boost neighbors (Area of impact)
+      const targetIdx = WHEEL_ORDER.indexOf(predictedNum);
+      for (let offset = -2; offset <= 2; offset++) {
+        if (offset === 0) continue;
+        const idx = (targetIdx + offset + 37) % 37;
+        numberScores[WHEEL_ORDER[idx]] += 300 * (confidence / 100);
       }
+
+      detectedBiases.push({
+        type: 'Balística Ativa',
+        value: `Alvo: ${predictedNum} (Convergência de Ritmo)`,
+        confidence: confidence
+      });
     }
 
     // --- CAMADA 17: Z-SCORE (DESVIO PADRÃO ESTATÍSTICO) ---
@@ -2332,7 +2383,11 @@ export default function App() {
         betPercentage: betPercentageValue
       } 
     };
-  }, [history, engineWeights]);
+    } catch (err) {
+      console.error("Stats calculation error:", err);
+      return null;
+    }
+  }, [history, engineWeights, ballisticConvergence, nextBallDirection]);
 
   const { highlightedNumbers, allCylinderTargets, vacuumNumbers, targetZone, isOmega } = useMemo(() => {
     if (!stats) return { highlightedNumbers: [], allCylinderTargets: [], vacuumNumbers: [], targetZone: "", isOmega: false };
@@ -2661,27 +2716,29 @@ export default function App() {
       <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-gold-primary/30 relative overflow-hidden" translate="no">
       {/* Toaster for notifications */}
       <Toaster 
-        position="bottom-right" 
-        theme="dark" 
+        position="top-right" 
+        theme="light" 
         richColors 
         closeButton 
         toastOptions={{
           style: {
-            background: 'rgba(5, 5, 5, 0.95)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(191, 149, 63, 0.4)',
-            color: '#fff',
+            background: 'rgba(255, 255, 255, 0.8)',
+            backdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            color: '#000000',
             fontFamily: 'inherit',
-            fontSize: '10px',
+            fontSize: '12px',
             textTransform: 'uppercase',
-            letterSpacing: '0.1em',
+            letterSpacing: '0.05em',
             fontWeight: '900',
-            borderRadius: '0.5rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(191, 149, 63, 0.1)',
-            width: '180px',
-            minHeight: '60px',
-            padding: '12px'
-          }
+            borderRadius: '1.2rem',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.2)',
+            width: '280px',
+            minHeight: '80px',
+            padding: '20px',
+            cursor: 'pointer'
+          },
+          className: "light-glass-toast"
         }}
       />
 
@@ -2760,7 +2817,10 @@ export default function App() {
                 <div className="hidden md:block text-right">
                   <p className="text-[10px] font-black text-white uppercase tracking-tighter">{user.displayName || 'Usuário'}</p>
                   <button 
-                    onClick={() => logout().catch(err => console.error('Logout error:', err))} 
+                    onClick={() => logout().catch(err => {
+                      console.error('Logout error:', err);
+                      toast.error("Erro ao sair da conta");
+                    })} 
                     className="text-[8px] font-black text-zinc-500 hover:text-red-500 uppercase tracking-[0.2em] transition-colors"
                   >
                     Sair da Conta
@@ -2778,7 +2838,12 @@ export default function App() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => loginWithGoogle().catch(err => console.error('Login error:', err))}
+                onClick={() => loginWithGoogle().catch(err => {
+                  console.error('Login error:', err);
+                  if (err.code !== 'auth/popup-closed-by-user') {
+                    toast.error("Erro na autenticação");
+                  }
+                })}
                 className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
               >
                 <Eye className="w-4 h-4 text-gold-primary" />
@@ -2860,14 +2925,9 @@ export default function App() {
                 onGoogleSearch={handleGoogleSearch}
                 browserUrl={browserUrl}
                 onClearBrowser={() => setBrowserUrl(null)}
-                ballisticMode={ballisticMode}
-                currentDropPoint={currentDropPoint}
-                onToggleBallisticMode={() => {
-                  setBallisticMode(!ballisticMode);
-                  setCurrentDropPoint(null);
-                }}
-                nextBallDirection={nextBallDirection}
                 onToggleDirection={() => setNextBallDirection(prev => prev === 'DIR' ? 'ESQ' : 'DIR')}
+                ballisticConvergence={ballisticConvergence}
+                ballisticJumps={ballisticJumps}
               />
             </motion.div>
           </Suspense>

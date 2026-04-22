@@ -71,34 +71,77 @@ const RacetrackSegment: React.FC<{
   isVacuum: boolean;
   isMirror: boolean;
   isMainTarget: boolean;
+  isLastNumber: boolean;
   isOmega: boolean;
   color: string;
-}> = React.memo(({ num, path, textX, textY, textRotation = 0, isHighlighted, isContext, isVacuum, isMirror, isMainTarget, isOmega, color }) => {
+}> = React.memo(({ num, path, textX, textY, textRotation = 0, isHighlighted, isContext, isVacuum, isMirror, isMainTarget, isLastNumber, isOmega, color }) => {
   return (
     <g>
       {/* Fatia do Número */}
       <path
         d={path}
         fill={color}
-        stroke="url(#goldRimGradient)"
-        strokeWidth="2"
-        className={isHighlighted || isVacuum || isContext ? 'brightness-125' : ''}
+        stroke="url(#classicMetalGradient)"
+        strokeWidth="1.5"
+        className={isHighlighted || isVacuum || isContext || isLastNumber ? 'brightness-125' : ''}
       />
       
-      {/* Efeito de Destaque Premium (Verde Neon para todos) */}
-      {(isHighlighted || isContext || isVacuum) && (
+      {/* Círculo Verde para Todos os Alvos (Probabilidades, Contexto, Vácuo) */}
+      {(isHighlighted || isContext || isVacuum) && !isMainTarget && (
         <g>
           <path
             d={path}
             fill="url(#targetGlow)"
-            style={{ filter: `drop-shadow(0 0 4px #4ade80)` }}
+            style={{ filter: `drop-shadow(0 0 6px #22c55e)` }}
           />
           <circle 
             cx={textX} cy={textY} r="14" 
             fill="none" 
-            stroke="#4ade80" 
+            stroke="#22c55e" 
+            strokeWidth="3" 
+            style={{ filter: `drop-shadow(0 0 8px #22c55e)` }}
+          />
+        </g>
+      )}
+
+      {/* Círculo Vermelho Neon para o Alvo Principal (Convergência Máxima) */}
+      {isMainTarget && (
+        <g>
+          <path
+            d={path}
+            fill="url(#mainTargetGlow)"
+            style={{ filter: `drop-shadow(0 0 12px #ef4444)` }}
+          />
+          <circle 
+            cx={textX} cy={textY} r="16" 
+            fill="none" 
+            stroke="#ef4444" 
+            strokeWidth="4" 
+            style={{ filter: `drop-shadow(0 0 20px #ef4444)` }}
+          />
+          {/* Anel Externo Neon Reforçado */}
+          <circle 
+            cx={textX} cy={textY} r="19" 
+            fill="none" 
+            stroke="#ef4444" 
+            strokeWidth="1.5" 
+            strokeDasharray="3 2"
+            opacity="0.8"
+          >
+            <animate attributeName="opacity" values="0.8;0.4;0.8" dur="1.5s" repeatCount="indefinite" />
+          </circle>
+        </g>
+      )}
+
+      {/* Efeito de Destaque para Último Número (Contorno Verde Sutil) */}
+      {isLastNumber && !isMainTarget && !isHighlighted && !isContext && !isVacuum && (
+        <g>
+          <circle 
+            cx={textX} cy={textY} r="14" 
+            fill="none" 
+            stroke="#22c55e" 
             strokeWidth="2.5" 
-            style={{ filter: `drop-shadow(0 0 6px #4ade80)` }}
+            opacity="0.6"
           />
         </g>
       )}
@@ -166,7 +209,7 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           key={num} num={num} path={path} textX={textX} textY={textY} textRotation={90}
           isHighlighted={effectiveHighlighted.has(num)} isContext={contextNumbers.includes(num)}
           isVacuum={vacuumNumbers.includes(num)} isMirror={mirrorHighlights.has(num) || (MIRROR_NUMBERS_LIST.includes(num) && highlightedNumbers.includes(num))}
-          isMainTarget={num === mainTarget} isOmega={isOmega} color={getColor(num)}
+          isMainTarget={num === mainTarget} isLastNumber={num === lastNumber} isOmega={isOmega} color={getColor(num)}
         />
       );
     });
@@ -184,7 +227,7 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           key={num} num={num} path={path} textX={textX} textY={textY} textRotation={90}
           isHighlighted={effectiveHighlighted.has(num)} isContext={contextNumbers.includes(num)}
           isVacuum={vacuumNumbers.includes(num)} isMirror={mirrorHighlights.has(num) || (MIRROR_NUMBERS_LIST.includes(num) && highlightedNumbers.includes(num))}
-          isMainTarget={num === mainTarget} isOmega={isOmega} color={getColor(num)}
+          isMainTarget={num === mainTarget} isLastNumber={num === lastNumber} isOmega={isOmega} color={getColor(num)}
         />
       );
     });
@@ -203,7 +246,7 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           key={num} num={num} path={path} textX={textPos.x} textY={textPos.y} textRotation={midAngle + 90}
           isHighlighted={effectiveHighlighted.has(num)} isContext={contextNumbers.includes(num)}
           isVacuum={vacuumNumbers.includes(num)} isMirror={mirrorHighlights.has(num) || (MIRROR_NUMBERS_LIST.includes(num) && highlightedNumbers.includes(num))}
-          isMainTarget={num === mainTarget} isOmega={isOmega} color={getColor(num)}
+          isMainTarget={num === mainTarget} isLastNumber={num === lastNumber} isOmega={isOmega} color={getColor(num)}
         />
       );
     });
@@ -222,13 +265,13 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           key={num} num={num} path={path} textX={textPos.x} textY={textPos.y} textRotation={midAngle - 90}
           isHighlighted={effectiveHighlighted.has(num)} isContext={contextNumbers.includes(num)}
           isVacuum={vacuumNumbers.includes(num)} isMirror={mirrorHighlights.has(num) || (MIRROR_NUMBERS_LIST.includes(num) && highlightedNumbers.includes(num))}
-          isMainTarget={num === mainTarget} isOmega={isOmega} color={getColor(num)}
+          isMainTarget={num === mainTarget} isLastNumber={num === lastNumber} isOmega={isOmega} color={getColor(num)}
         />
       );
     });
 
     return allSegments;
-  }, [highlightedNumbers, contextNumbers, vacuumNumbers, mainTarget, isOmega]);
+  }, [highlightedNumbers, contextNumbers, vacuumNumbers, mainTarget, isOmega, lastNumber]);
 
   return (
     <div className="relative w-full mx-auto overflow-hidden flex justify-center items-center p-4" style={{ contain: 'layout paint', maxHeight: '600px' }}>
@@ -245,13 +288,13 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
             <stop offset="100%" stopColor="#0c0a09" />
           </radialGradient>
 
-          {/* Gradiente Dourado Polido */}
-          <linearGradient id="goldRimGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#854d0e" />
-            <stop offset="20%" stopColor="#fde047" />
-            <stop offset="45%" stopColor="#fef9c3" />
-            <stop offset="70%" stopColor="#eab308" />
-            <stop offset="100%" stopColor="#422006" />
+          {/* Gradiente Metálico Clássico (Prata/Aço Polido) */}
+          <linearGradient id="classicMetalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#334155" />
+            <stop offset="25%" stopColor="#94a3b8" />
+            <stop offset="50%" stopColor="#f8fafc" />
+            <stop offset="75%" stopColor="#64748b" />
+            <stop offset="100%" stopColor="#1e293b" />
           </linearGradient>
 
           {/* Brilho de Alvos */}
@@ -288,11 +331,11 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
         {/* Fundo do Racetrack (Madeira) */}
         <rect x="0" y="0" width="400" height="900" fill="url(#woodGradient)" rx="40" />
         
-        {/* Aro Externo Dourado Polido */}
-        <path d={`M ${CENTER_X - OUTER_RADIUS} ${TOP_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X + OUTER_RADIUS} ${TOP_Y} L ${CENTER_X + OUTER_RADIUS} ${BOTTOM_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X - OUTER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="4" />
+        {/* Aro Externo Metálico Polido */}
+        <path d={`M ${CENTER_X - OUTER_RADIUS} ${TOP_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X + OUTER_RADIUS} ${TOP_Y} L ${CENTER_X + OUTER_RADIUS} ${BOTTOM_Y} A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${CENTER_X - OUTER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="url(#classicMetalGradient)" strokeWidth="3" />
         
-        {/* Aro Interno Dourado Polido */}
-        <path d={`M ${CENTER_X - INNER_RADIUS} ${TOP_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X + INNER_RADIUS} ${TOP_Y} L ${CENTER_X + INNER_RADIUS} ${BOTTOM_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X - INNER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="2" />
+        {/* Aro Interno Metálico Polido */}
+        <path d={`M ${CENTER_X - INNER_RADIUS} ${TOP_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X + INNER_RADIUS} ${TOP_Y} L ${CENTER_X + INNER_RADIUS} ${BOTTOM_Y} A ${INNER_RADIUS} ${INNER_RADIUS} 0 0 1 ${CENTER_X - INNER_RADIUS} ${BOTTOM_Y} Z`} fill="none" stroke="url(#classicMetalGradient)" strokeWidth="1.5" />
 
         {/* Segmentos */}
         {segments}
@@ -362,7 +405,7 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
           `} fill="rgba(234, 179, 8, 0.15)" />
 
           {/* Aro Interno dos Setores */}
-          <path d={`M ${CENTER_X - 45} ${TOP_Y} A 45 45 0 0 1 ${CENTER_X + 45} ${TOP_Y} L ${CENTER_X + 45} ${BOTTOM_Y} A 45 45 0 0 1 ${CENTER_X - 45} ${BOTTOM_Y} Z`} fill="none" stroke="url(#goldRimGradient)" strokeWidth="1.5" />
+          <path d={`M ${CENTER_X - 45} ${TOP_Y} A 45 45 0 0 1 ${CENTER_X + 45} ${TOP_Y} L ${CENTER_X + 45} ${BOTTOM_Y} A 45 45 0 0 1 ${CENTER_X - 45} ${BOTTOM_Y} Z`} fill="none" stroke="url(#classicMetalGradient)" strokeWidth="1" />
 
           {/* Linhas Divisórias dos Setores (Entalhes Metálicos 3D) */}
           <g>
@@ -374,7 +417,7 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
                 {/* Brilho */}
                 <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT - 1} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT - 1} stroke="#ffffff" strokeWidth="1" opacity="0.5" />
                 {/* Barra Metálica */}
-                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT} stroke="url(#goldRimGradient)" strokeWidth="3" />
+                <line x1={CENTER_X - 60} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X - 45} y2={TOP_Y + row * ROW_HEIGHT} stroke="url(#classicMetalGradient)" strokeWidth="2" />
               </g>
             ))}
             
@@ -386,7 +429,7 @@ const RouletteWheelVisual: React.FC<RouletteWheelVisualProps> = React.memo(({
                 {/* Brilho */}
                 <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT - 1} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT - 1} stroke="#ffffff" strokeWidth="1" opacity="0.5" />
                 {/* Barra Metálica */}
-                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT} stroke="url(#goldRimGradient)" strokeWidth="3" />
+                <line x1={CENTER_X + 45} y1={TOP_Y + row * ROW_HEIGHT} x2={CENTER_X + 60} y2={TOP_Y + row * ROW_HEIGHT} stroke="url(#classicMetalGradient)" strokeWidth="2" />
               </g>
             ))}
 

@@ -15,23 +15,62 @@ window.addEventListener('error', (event) => {
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  // Prevent the default browser behavior (logging to console)
-  event.preventDefault();
-  
   const reason = event.reason;
-  let message = '';
-  let stack = '';
   
+  // Ignorar erros sem razão para evitar logs vazios
+  if (!reason) {
+    event.preventDefault();
+    return;
+  }
+  
+  // Extração inteligente de mensagem (garantindo que seja string)
+  let message = '';
   if (reason instanceof Error) {
     message = reason.message;
-    stack = reason.stack || '';
+  } else if (typeof reason === 'object') {
+    const rawMsg = reason.message || reason.code || reason.error;
+    message = typeof rawMsg === 'string' ? rawMsg : String(reason);
   } else {
     message = String(reason);
   }
+
+  // Filtrar silenciosamente erros conhecidos que não são "bugs" (cancelamentos de UI, rede instável, etc)
+  const ignoredPatterns = [
+    'auth/popup-closed-by-user',
+    'auth/cancelled-by-user',
+    'Firebase: Error',
+    'FirebaseError',
+    'Quota exceeded',
+    'The user has denied the request',
+    'permission-denied',
+    'Failed to fetch dynamically imported module',
+    'Importing a module script failed',
+    'auth/network-request-failed'
+  ];
+
+  if (ignoredPatterns.some(p => message.includes(p))) {
+    event.preventDefault();
+    return;
+  }
+
+  // Se chegamos aqui, é um erro real que o usuário deve ver nos logs
+  event.preventDefault();
   
-  console.error('Unhandled promise rejection:', message);
-  if (stack) console.error('Stack:', stack);
-  console.error('Full reason object:', reason);
+  console.group('%c --- UNHANDLED PROMISE REJECTION --- ', 'background: #991b1b; color: white; border-radius: 4px; padding: 2px;');
+  console.error('Message:', message || '(No message)');
+  
+  if (reason instanceof Error) {
+    console.error('Stack:', reason.stack || '(No stack trace)');
+  } else if (typeof reason === 'object') {
+    try {
+      console.error('As JSON:', JSON.stringify(reason, null, 2));
+    } catch (e) {
+      console.error('Properties:', Object.keys(reason));
+    }
+  }
+  
+  console.error('Original Object:', reason);
+  console.groupEnd();
 });
 
 try {
