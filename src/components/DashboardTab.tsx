@@ -25,7 +25,10 @@ interface DashboardTabProps {
   browserUrl?: string | null;
   onClearBrowser?: () => void;
   nextBallDirection?: 'DIR' | 'ESQ';
+  autoToggleDirection?: boolean;
   onToggleDirection?: () => void;
+  onSetDirection?: (dir: 'DIR' | 'ESQ') => void;
+  onToggleAutoDirection?: () => void;
   ballisticConvergence?: { target: number; confidence: number } | null;
   ballisticJumps?: number[];
 }
@@ -51,7 +54,10 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
   browserUrl,
   onClearBrowser,
   nextBallDirection,
+  autoToggleDirection,
   onToggleDirection,
+  onSetDirection,
+  onToggleAutoDirection,
   ballisticConvergence,
   ballisticJumps
 }) => {
@@ -465,17 +471,29 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
               <Zap className="w-4 h-4 text-gold-primary" />
               <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">Entrada de Dados Rápida</h2>
             </div>
-            <div className="flex gap-2">
-              <button 
-                onClick={onToggleDirection} 
-                className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all shadow-lg ${nextBallDirection === 'DIR' ? 'bg-gold-primary/20 border-gold-primary/40 text-gold-primary' : 'bg-blue-500/20 border-blue-500/40 text-blue-400'}`}
-              >
-                {nextBallDirection === 'DIR' ? 'Lançamento: Direita (CW)' : 'Lançamento: Esquerda (CCW)'}
-              </button>
-              <div className="px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Balística AUTO
+            <div className="flex flex-col sm:flex-row gap-2 items-end sm:items-center">
+              <div className="flex bg-white/5 rounded-xl p-1 border border-white/10 shadow-lg">
+                <button 
+                  onClick={() => onSetDirection?.('DIR')} 
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${nextBallDirection === 'DIR' ? 'bg-gold-primary/20 text-gold-primary' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  Direita
+                </button>
+                <button 
+                  onClick={() => onSetDirection?.('ESQ')} 
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${nextBallDirection === 'ESQ' ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  Esquerda
+                </button>
               </div>
+
+              <button 
+                onClick={onToggleAutoDirection} 
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[8px] font-black uppercase tracking-widest transition-all ${autoToggleDirection ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'bg-white/5 border-white/10 text-zinc-500'}`}
+              >
+                <div className={`w-1.5 h-1.5 rounded-full ${autoToggleDirection ? 'bg-emerald-500 animate-pulse shadow-[0_0_5px_rgba(16,185,129,1)]' : 'bg-zinc-700'}`} />
+                {autoToggleDirection ? 'Alternância Ativa' : 'Alternância Off'}
+              </button>
             </div>
           </div>
 

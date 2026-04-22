@@ -369,6 +369,7 @@ export default function App() {
   const [lastNumber, setLastNumber] = useState<number | null>(null);
 
   const [nextBallDirection, setNextBallDirection] = useState<'DIR' | 'ESQ'>('DIR');
+  const [autoToggleDirection, setAutoToggleDirection] = useState(true);
 
   const handleGoogleSearch = React.useCallback((query: string) => {
     if (!query) {
@@ -472,7 +473,9 @@ export default function App() {
     if (!validate(num)) return;
     
     totalNumbersAdded.current += 1;
-    setNextBallDirection(prev => prev === 'DIR' ? 'ESQ' : 'DIR');
+    if (autoToggleDirection) {
+      setNextBallDirection(prev => prev === 'DIR' ? 'ESQ' : 'DIR');
+    }
 
     // Simulate haptic feedback
     if (window.navigator.vibrate) {
@@ -2925,7 +2928,14 @@ export default function App() {
                 onGoogleSearch={handleGoogleSearch}
                 browserUrl={browserUrl}
                 onClearBrowser={() => setBrowserUrl(null)}
+                nextBallDirection={nextBallDirection}
+                autoToggleDirection={autoToggleDirection}
                 onToggleDirection={() => setNextBallDirection(prev => prev === 'DIR' ? 'ESQ' : 'DIR')}
+                onSetDirection={(dir: 'DIR' | 'ESQ') => {
+                  setNextBallDirection(dir);
+                  setAutoToggleDirection(true);
+                }}
+                onToggleAutoDirection={() => setAutoToggleDirection(prev => !prev)}
                 ballisticConvergence={ballisticConvergence}
                 ballisticJumps={ballisticJumps}
               />
