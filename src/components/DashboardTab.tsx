@@ -428,10 +428,10 @@ const DashboardTab: React.FC<DashboardTabProps> = React.memo(({
                   sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-storage-access-by-user-activation"
                   referrerPolicy="no-referrer"
                 />
-                <div className="absolute top-6 right-6 flex space-x-3 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setIsMaximized(!isMaximized)} className="bg-zinc-900/90 text-white p-3 rounded-xl border border-white/10"><Maximize2 className="w-5 h-5" /></button>
-                  <button onClick={handleRefreshIframe} className="bg-zinc-900/90 text-white p-3 rounded-xl border border-white/10"><RotateCcw className="w-5 h-5" /></button>
-                  <button onClick={handleClearBrowser} className="bg-red-500/20 text-red-500 p-3 rounded-xl border border-red-500/30"><X className="w-5 h-5" /></button>
+                <div className="absolute top-2 right-2 flex space-x-1.5 z-20 opacity-20 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => setIsMaximized(!isMaximized)} className="bg-zinc-900/60 hover:bg-zinc-900 text-white p-1.5 rounded-lg border border-white/5 transition-colors"><Maximize2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={handleRefreshIframe} className="bg-zinc-900/60 hover:bg-zinc-900 text-white p-1.5 rounded-lg border border-white/5 transition-colors"><RotateCcw className="w-3.5 h-3.5" /></button>
+                  <button onClick={handleClearBrowser} className="bg-red-500/10 hover:bg-red-500/30 text-red-500 p-1.5 rounded-lg border border-red-500/10 transition-colors"><X className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
             ) : (
